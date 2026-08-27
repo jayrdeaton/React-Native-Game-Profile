@@ -1,9 +1,10 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
+import { useFocusChain } from '@rific/focus-chain'
 import { useToast } from '@rific/toaster'
 import { InlineColorPicker, PopoverHost, usePopoverHost } from '@tastic/hud'
-import { ComponentRef, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput as RNTextInput, View } from 'react-native'
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native'
 import { Button, Icon, Portal, Text, TextInput } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -275,21 +276,26 @@ interface EditRowProps {
 // color trigger here — it keeps its plain palette icon regardless of the row's own tag field, since
 // the tag is already right next to it in its own field, so repeating it on the color trigger too
 // would be redundant rather than informative.
-// Return-key chains tag -> name via explicit refs rather than each field submitting on its
-// own — submitting the *name* field is what actually commits the row (see the last field's own
-// onSubmitEditing override below), matching how a normal multi-field form reads: fill fields in
-// order, the last one finishes it.
+// Return-key chains tag -> name via @rific/focus-chain rather than each field submitting on its
+// own — submitting the *name* field is what actually commits the row, so its registration's own
+// onSubmitEditing (a no-op — it's last in the chain) is overridden with onSubmit below, matching
+// how a normal multi-field form reads: fill fields in order, the last one finishes it.
 function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag, onTagChange, tagInvalid, onSubmit, onDelete, autoFocus, fgMuted, host, dark }: EditRowProps) {
-  const tagInputRef = useRef<ComponentRef<typeof RNTextInput>>(null)
-  const nameInputRef = useRef<ComponentRef<typeof RNTextInput>>(null)
+  const register = useFocusChain()
+  const tag = register()
+  const name = register()
 
   return (
     <View style={styles.editRow}>
       <InlineColorPicker id='color' host={host} value={draftColor} onChange={onColorChange} dark={dark} />
       {/* selectTextOnFocus so tapping into an already-set tag selects it for wholesale replacement
       — the far more common edit than inserting into the middle of a 1-3 character value. */}
-      <TextInput ref={tagInputRef} mode='outlined' dense value={draftTag} onChangeText={onTagChange} placeholder='Tag' autoCapitalize='characters' selectTextOnFocus error={tagInvalid} returnKeyType='next' style={styles.tagInput} contentStyle={styles.tagInputContent} onSubmitEditing={() => nameInputRef.current?.focus()} />
-      <TextInput ref={nameInputRef} mode='outlined' dense value={draftName} onChangeText={onNameChange} maxLength={MAX_PROFILE_NAME_LENGTH} placeholder='Name' autoFocus={autoFocus} returnKeyType='done' style={styles.nameInput} onSubmitEditing={onSubmit} />
+      {/* eslint-disable-next-line react-hooks/refs -- tag.ref/tag.props come from useFocusChain's
+      register(), called during render by design (see the hook's own doc); the actual DOM/native
+      focus() call it wraps only ever fires later, from an event handler, never synchronously here */}
+      <TextInput ref={tag.ref} {...tag.props} mode='outlined' dense value={draftTag} onChangeText={onTagChange} placeholder='Tag' autoCapitalize='characters' selectTextOnFocus error={tagInvalid} returnKeyType='next' style={styles.tagInput} contentStyle={styles.tagInputContent} />
+      {/* eslint-disable-next-line react-hooks/refs -- see the tag field's identical note above */}
+      <TextInput ref={name.ref} {...name.props} onSubmitEditing={onSubmit} mode='outlined' dense value={draftName} onChangeText={onNameChange} maxLength={MAX_PROFILE_NAME_LENGTH} placeholder='Name' autoFocus={autoFocus} returnKeyType='done' style={styles.nameInput} />
       {onDelete && (
         <TouchableRipple onPress={onDelete} style={styles.iconButton}>
           <Icon source='trash-can-outline' size={18} color={fgMuted} />
