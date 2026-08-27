@@ -1,6 +1,6 @@
 {
   "name": "@tastic/profile",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Player profile identity for local-multiplayer React Native games — a saved name/color/tag a player selects per seat, with a picker, an inline-editable roster screen, and a reusable identity badge, deliberately blind to any app-specific fields (control scheme, stats) an app layers on top",
   "keywords": [
     "react-native",
