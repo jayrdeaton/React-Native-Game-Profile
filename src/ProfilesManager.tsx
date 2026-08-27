@@ -1,10 +1,9 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
-import { useFocusChain } from '@rific/focus-chain'
 import { useToast } from '@rific/toaster'
 import { InlineColorPicker, PopoverHost, usePopoverHost } from '@tastic/hud'
-import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native'
+import { ComponentRef, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput as RNTextInput, View } from 'react-native'
 import { Button, Icon, Portal, Text, TextInput } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -270,33 +269,27 @@ interface EditRowProps {
   dark: boolean
 }
 
-// One row, expanded: the color trigger (@tastic/hud's InlineColorPicker, which takes a size prop
-// rather than a fixed one, so it can be clamped to CHIP_SIZE along with every other circle on this
-// screen), a tag field clamped to that same CHIP_SIZE footprint, the name taking up whatever's
+// One row, expanded: the color trigger (@tastic/hud's InlineColorPicker), a tag field clamped to
+// CHIP_SIZE, the name taking up whatever's
 // left, and — only for an existing profile — a delete icon at the very end. No `tag` passed to the
 // color trigger here — it keeps its plain palette icon regardless of the row's own tag field, since
 // the tag is already right next to it in its own field, so repeating it on the color trigger too
 // would be redundant rather than informative.
-// Return-key chains tag -> name (see @rific/focus-chain) rather than each field submitting on its
+// Return-key chains tag -> name via explicit refs rather than each field submitting on its
 // own — submitting the *name* field is what actually commits the row (see the last field's own
 // onSubmitEditing override below), matching how a normal multi-field form reads: fill fields in
 // order, the last one finishes it.
 function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag, onTagChange, tagInvalid, onSubmit, onDelete, autoFocus, fgMuted, host, dark }: EditRowProps) {
-  const register = useFocusChain()
-  const tag = register()
-  const name = register()
+  const tagInputRef = useRef<ComponentRef<typeof RNTextInput>>(null)
+  const nameInputRef = useRef<ComponentRef<typeof RNTextInput>>(null)
 
   return (
     <View style={styles.editRow}>
-      <InlineColorPicker id='color' host={host} value={draftColor} onChange={onColorChange} dark={dark} size={CHIP_SIZE} />
+      <InlineColorPicker id='color' host={host} value={draftColor} onChange={onColorChange} dark={dark} />
       {/* selectTextOnFocus so tapping into an already-set tag selects it for wholesale replacement
       — the far more common edit than inserting into the middle of a 1-3 character value. */}
-      <TextInput ref={tag.ref} {...tag.props} mode='outlined' dense value={draftTag} onChangeText={onTagChange} placeholder='Tag' autoCapitalize='characters' selectTextOnFocus error={tagInvalid} returnKeyType='next' style={styles.tagInput} contentStyle={styles.tagInputContent} />
-      {/* tag.props' own onSubmitEditing (focus the next field) applies to every field but this
-      one — as the chain's last field, submitting it should finish the row instead of trying to
-      focus a field that doesn't exist, so this overrides it with the real commit action. Spread
-      order matters: name.props first, the explicit prop after, so this wins. */}
-      <TextInput ref={name.ref} {...name.props} mode='outlined' dense value={draftName} onChangeText={onNameChange} maxLength={MAX_PROFILE_NAME_LENGTH} placeholder='Name' autoFocus={autoFocus} returnKeyType='done' style={styles.nameInput} onSubmitEditing={onSubmit} />
+      <TextInput ref={tagInputRef} mode='outlined' dense value={draftTag} onChangeText={onTagChange} placeholder='Tag' autoCapitalize='characters' selectTextOnFocus error={tagInvalid} returnKeyType='next' style={styles.tagInput} contentStyle={styles.tagInputContent} onSubmitEditing={() => nameInputRef.current?.focus()} />
+      <TextInput ref={nameInputRef} mode='outlined' dense value={draftName} onChangeText={onNameChange} maxLength={MAX_PROFILE_NAME_LENGTH} placeholder='Name' autoFocus={autoFocus} returnKeyType='done' style={styles.nameInput} onSubmitEditing={onSubmit} />
       {onDelete && (
         <TouchableRipple onPress={onDelete} style={styles.iconButton}>
           <Icon source='trash-can-outline' size={18} color={fgMuted} />
