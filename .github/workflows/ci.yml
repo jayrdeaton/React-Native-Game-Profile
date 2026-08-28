@@ -1,5 +1,5 @@
 name: CI
-run-name: CI — ${{ github.head_ref || github.ref_name }}
+run-name: CI - ${{ github.event.pull_request.title || github.event.head_commit.message }}
 
 on:
   pull_request:
@@ -9,4 +9,4 @@ on:
 
 jobs:
   quality:
-    uses: infinitetoken/Workflows/.github/workflows/npm-ci.yml@v0.1.3
+    uses: infinitetoken/Workflows/.github/workflows/npm-ci.yml@v1

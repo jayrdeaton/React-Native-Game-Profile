@@ -8,7 +8,7 @@ on:
 
 jobs:
   publish:
-    uses: infinitetoken/Workflows/.github/workflows/npm-publish.yml@v0.1.3
+    uses: infinitetoken/Workflows/.github/workflows/npm-publish.yml@v1
     permissions:
       contents: read
       id-token: write
