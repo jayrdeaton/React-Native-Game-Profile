@@ -54,6 +54,38 @@ see its own doc comment for why that component is generic over your own `Profile
   inline in the row you tap, with a destructive-delete confirmation. No navigation of its own (no
   router, no back button) — a host app renders this as a routed screen's body and supplies its own
   persistence via `profiles`/`onCreate`/`onSave`/`onDelete`.
+- **`loadSharedProfiles` / `saveSharedProfiles` / `isSharedProfileStoreAvailable`** — an *optional*
+  cross-app roster, shared between multiple apps of yours via a native iOS App Group (same Apple
+  Developer Team, same `"com.apple.security.application-groups"` entitlement value on every
+  participating app). This only ever carries the base `Profile` shape above — a host app's own
+  extension fields (a key scheme, a control scheme, anything else) are NOT part of it and have to
+  keep living in that app's own *local* storage, keyed by profile id, merged onto the shared base
+  roster at read time (falling back to some per-app default whenever a shared profile's id isn't
+  in that app's own local extension table yet — e.g. it was created on a different app in the
+  group). This split is deliberate, not a limitation to work around: it's this package's own
+  base-fields-only `Profile` boundary (see above), just applied to storage instead of just to the
+  TypeScript type.
+
+  ```ts
+  // App-side sketch — see BoxHockey's or LightCycles' own useProfiles.tsx for a full example.
+  const GROUP_ID = 'group.com.yourteam.yourgames'
+  const base = isSharedProfileStoreAvailable ? await loadSharedProfiles(GROUP_ID) : localBaseFallback
+  const profiles = base.map((p) => ({ ...p, controlScheme: localExtensions[p.id]?.controlScheme ?? DEFAULT_CONTROL_SCHEME }))
+  // ...on create/update/delete, write the base fields back with saveSharedProfiles(GROUP_ID, nextBase)
+  // and the extension field to the app's own local storage, same as today.
+  ```
+
+  Backed by a small native Expo Module (`ios/TasticProfileModule.swift`) wrapping
+  `UserDefaults(suiteName:)` — iOS only (see `expo-module.config.json`'s `"apple"`-only platform
+  list); `isSharedProfileStoreAvailable` is `false` on Android/web and on any iOS build that hasn't
+  run `expo prebuild` since adding this App Group's entitlement, so a host app always needs its own
+  local-storage fallback path regardless of platform. Requires the App Group itself to be declared
+  in each consuming app's own Expo config, e.g.:
+
+  ```json
+  // app.json
+  { "expo": { "ios": { "entitlements": { "com.apple.security.application-groups": ["group.com.yourteam.yourgames"] } } } }
+  ```
 
 ## Install (local dev via yalc)
 
