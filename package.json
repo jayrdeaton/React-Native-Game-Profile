@@ -47,7 +47,6 @@
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --clean",
     "build:watch": "tsup src/index.ts --format cjs,esm --dts --watch",
-    "ci": "npm run lint && npm test && npm run typecheck && npm run build",
     "fix": "eslint --fix",
     "lint": "eslint",
     "prepublishOnly": "npm run build",
@@ -58,7 +57,8 @@
     "test": "jest",
     "test:watch": "jest --watchAll",
     "typecheck": "tsc --noEmit",
-    "preversion": "npm run ci"
+    "verify": "npm run lint && npm test && npm run typecheck && npm run build",
+    "preversion": "npm ci && npm run verify"
   },
   "prettier": "@infinitetoken/eslint-config/prettier",
   "devDependencies": {
