@@ -1,4 +1,4 @@
-import { isValidProfile, isValidTag, MAX_PROFILE_NAME_LENGTH, MAX_TAG_LENGTH } from '../profilesValidation'
+import { clampTag, isValidProfile, isValidTag, MAX_PROFILE_NAME_LENGTH, MAX_TAG_LENGTH } from '../profilesValidation'
 
 const VALID_PROFILE = {
   id: 'profile-1',
@@ -91,5 +91,39 @@ describe('isValidTag', () => {
     expect(isValidTag(5)).toBe(false)
     expect(isValidTag(null)).toBe(false)
     expect(isValidTag(undefined)).toBe(false)
+  })
+})
+
+describe('clampTag', () => {
+  it('allows typing plain letters up to MAX_TAG_LENGTH', () => {
+    expect(clampTag('', 'J')).toBe('J')
+    expect(clampTag('J', 'JA')).toBe('JA')
+    expect(clampTag('JA', 'JAY')).toBe('JAY')
+  })
+
+  it('rejects a keystroke that would grow past MAX_TAG_LENGTH plain letters', () => {
+    expect(clampTag('JAY', 'JAYD')).toBe('JAY')
+  })
+
+  it('lets backspacing/deleting through untouched, even from an over-length or invalid value', () => {
+    expect(clampTag('JAY', 'JA')).toBe('JA')
+    expect(clampTag('JA', '')).toBe('')
+  })
+
+  it('typing an emoji replaces whatever plain text was already there', () => {
+    expect(clampTag('JA', 'JA😎')).toBe('😎')
+  })
+
+  it('typing a second emoji replaces the first', () => {
+    expect(clampTag('😎', '😎🔥')).toBe('🔥')
+  })
+
+  it('typing plain letters after an emoji replaces it, rather than mixing', () => {
+    expect(clampTag('😎', '😎J')).toBe('J')
+  })
+
+  it('passes a same-length or shorter replacement straight through (selectTextOnFocus wholesale replace)', () => {
+    expect(clampTag('JAY', 'BOB')).toBe('BOB')
+    expect(clampTag('JAY', '😎')).toBe('😎')
   })
 })

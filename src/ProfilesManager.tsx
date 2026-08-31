@@ -9,12 +9,11 @@ import { Button, Icon, Portal, Text, TextInput } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ProfileChip } from './ProfileChip'
-import { isValidTag, MAX_PROFILE_NAME_LENGTH } from './profilesValidation'
+import { clampTag, isValidTag, MAX_PROFILE_NAME_LENGTH } from './profilesValidation'
 import { Profile } from './types'
 
-// Shared by the New Profile row's own dashed circle, every profile row's own ProfileChip, the edit
-// row's color trigger, and its tag field — one size for every circle on this screen, rather than
-// each picking its own.
+// Shared by the New Profile row's own dashed circle and every profile row's own ProfileChip — one
+// size for every circle on this screen, rather than each picking its own.
 const CHIP_SIZE = 40
 
 interface ProfileEditPatch {
@@ -145,8 +144,14 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
     [tagManuallySet]
   )
 
+  // The functional setDraftTag form — reading `previous` from React's own latest-applied state
+  // rather than closing over the `draftTag` variable — matters here, not just style: fast/rapid
+  // keystrokes can fire their onChangeText calls before a re-render lands, batched into the same
+  // update, and clamping every one of them against the same stale `draftTag` (captured once at
+  // render time) would let the later ones silently clobber what the earlier ones already clamped
+  // to, rather than each building on the last.
   const handleTagChange = useCallback((tag: string) => {
-    setDraftTag(tag)
+    setDraftTag((previous) => clampTag(previous, tag))
     setTagManuallySet(true)
   }, [])
 
@@ -164,7 +169,6 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
   // handful of profiles on one shared device.
   const sortedProfiles = useMemo(() => [...profiles].sort((a, b) => a.name.localeCompare(b.name)), [profiles])
   const rows: Row[] = [...sortedProfiles.map((profile): Row => ({ kind: 'profile', profile })), { kind: 'new' }]
-  const tagInvalid = draftTag.length > 0 && !isValidTag(draftTag)
 
   return (
     <>
@@ -198,12 +202,12 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
                   </TouchableRipple>
                 )
               }
-              return <EditRow key='new' draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} tagInvalid={tagInvalid} onSubmit={commitEdit} autoFocus fgMuted={fgMuted} host={host} dark={dark} />
+              return <EditRow key='new' draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} autoFocus fgMuted={fgMuted} host={host} dark={dark} />
             }
 
             const { profile } = row
             if (editingId === profile.id) {
-              return <EditRow key={profile.id} draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} tagInvalid={tagInvalid} onSubmit={commitEdit} onDelete={() => setConfirmDeleteId(profile.id)} fgMuted={fgMuted} host={host} dark={dark} />
+              return <EditRow key={profile.id} draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} onDelete={() => setConfirmDeleteId(profile.id)} fgMuted={fgMuted} host={host} dark={dark} />
             }
 
             // No delete affordance at rest — tap the row to start editing, which is the one place
@@ -260,7 +264,6 @@ interface EditRowProps {
   onColorChange: (color: string) => void
   draftTag: string
   onTagChange: (tag: string) => void
-  tagInvalid: boolean
   onSubmit: () => void
   // Omitted for the 'new' row — nothing saved yet to delete.
   onDelete?: () => void
@@ -270,18 +273,19 @@ interface EditRowProps {
   dark: boolean
 }
 
-// One row, expanded: the color trigger (@tastic/hud's InlineColorPicker), a tag field clamped to
-// CHIP_SIZE, the name taking up whatever's
-// left, and — only for an existing profile — a delete icon at the very end. `tag={draftTag}` IS
-// passed to the color trigger here (unlike a plain identity badge elsewhere) so it shows the same
-// live draft value the tag field itself does — the two effects below are what wires tapping the
-// swatch to popping the keyboard on the tag field too, so typing a tag and picking a color read as
-// one combined action instead of two separate taps.
+// One row, expanded: the color trigger (@tastic/hud's InlineColorPicker) — doubling as the tag's
+// own display via its `tag` prop below, since there's no separate visible tag field anymore — an
+// invisible TextInput that exists purely to actually capture what's typed (RN has no way to bring
+// up a keyboard without a real focusable input; this one is just never meant to be *seen*), the
+// name taking up the row's remaining space, and — only for an existing profile — a delete icon at
+// the very end. The two effects below are what wires tapping the swatch to popping the keyboard on
+// the hidden tag field too, so typing a tag and picking a color read as one combined action instead
+// of two separate taps, with the swatch itself as the only place the tag ever visibly shows.
 // Return-key chains tag -> name via @rific/focus-chain rather than each field submitting on its
 // own — submitting the *name* field is what actually commits the row, so its registration's own
 // onSubmitEditing (a no-op — it's last in the chain) is overridden with onSubmit below, matching
 // how a normal multi-field form reads: fill fields in order, the last one finishes it.
-function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag, onTagChange, tagInvalid, onSubmit, onDelete, autoFocus, fgMuted, host, dark }: EditRowProps) {
+function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag, onTagChange, onSubmit, onDelete, autoFocus, fgMuted, host, dark }: EditRowProps) {
   const register = useFocusChain()
   const tag = register()
   const name = register()
@@ -309,12 +313,21 @@ function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag,
   return (
     <View style={styles.editRow}>
       <InlineColorPicker id='color' host={host} value={draftColor} onChange={onColorChange} tag={draftTag} dark={dark} />
-      {/* selectTextOnFocus so tapping into an already-set tag selects it for wholesale replacement
-      — the far more common edit than inserting into the middle of a 1-3 character value. */}
+      {/* Invisible on purpose (styles.hiddenTagInput: zero footprint, position: 'absolute' so it
+      doesn't reserve space in the row's own flex layout) — the swatch above is the only place this
+      value is ever meant to be seen. pointerEvents='none' is what actually keeps it out of the
+      way: without it, this field — even at 1x1 and fully transparent — still sits in front of the
+      swatch for hit-testing purposes and swallows the tap meant to open the color popover, since
+      focusing this field is never done by tapping it directly anyway (see the effect above, which
+      focuses it programmatically). accessibilityLabel stands in for the placeholder a visible field
+      would have had, so a screen reader still identifies it, and so this file's own tests can still
+      find it as "Tag" the same way they find the Name field by its placeholder. selectTextOnFocus
+      so re-tapping the swatch to revise an already-set tag replaces it wholesale rather than
+      inserting mid-string. */}
       {/* eslint-disable-next-line react-hooks/refs -- tag.ref/tag.props come from useFocusChain's
       register(), called during render by design (see the hook's own doc); the actual DOM/native
       focus() call it wraps only ever fires later, from an event handler, never synchronously here */}
-      <TextInput ref={tag.ref} {...tag.props} mode='outlined' dense value={draftTag} onChangeText={onTagChange} placeholder='Tag' autoCapitalize='characters' selectTextOnFocus error={tagInvalid} returnKeyType='next' style={styles.tagInput} contentStyle={styles.tagInputContent} />
+      <TextInput ref={tag.ref} {...tag.props} value={draftTag} onChangeText={onTagChange} accessibilityLabel='Tag' autoCapitalize='characters' selectTextOnFocus returnKeyType='next' style={styles.hiddenTagInput} pointerEvents='none' />
       {/* eslint-disable-next-line react-hooks/refs -- see the tag field's identical note above */}
       <TextInput ref={name.ref} {...name.props} onSubmitEditing={onSubmit} mode='outlined' dense value={draftName} onChangeText={onNameChange} maxLength={MAX_PROFILE_NAME_LENGTH} placeholder='Name' autoFocus={autoFocus} returnKeyType='done' style={styles.nameInput} />
       {onDelete && (
@@ -404,31 +417,14 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1
   },
-  // Wide enough for MAX_TAG_LENGTH monospace characters (or one emoji) plus its own padding/border
-  // — matched to CHIP_SIZE (the same footprint every other circle on this screen uses), not a
-  // fraction of the row's width, since the name field next to it is what should actually get the
-  // row's remaining space.
-  tagInput: {
-    height: CHIP_SIZE,
-    width: CHIP_SIZE
-  },
-  tagInputContent: {
-    // react-native-paper's outlined TextInput sets its own native input's minWidth from the
-    // placeholder/label's measured layout width (sized for a real label, not this field's own
-    // 3-character placeholder) — left alone, that floor is wider than CHIP_SIZE, so the actual
-    // editable box silently overflows past this field's own visible outline and centers within
-    // that wider, partly invisible box instead. Zeroing it here lets the input size to CHIP_SIZE
-    // instead, which is what actually makes `textAlign: 'center'` below center against the
-    // visible box rather than an overflowing invisible one.
-    minWidth: 0,
-    // Same reasoning as minWidth above, for the horizontal direction: the outlined input's own
-    // default padding (16px a side) is sized for a normal-width field, and at CHIP_SIZE's 40px
-    // that leaves only 8px total for actual text — not enough to fit the "Tag" placeholder itself
-    // (3 characters), which is what was clipping it to just "T" once minWidth stopped letting the
-    // box silently overflow wider to compensate.
-    paddingHorizontal: 2,
-    textAlign: 'center',
-    textAlignVertical: 'center'
+  // 1x1 and fully transparent — there's nothing to see here on purpose (see EditRow's own comment
+  // above the field this styles). position: 'absolute' pulls it out of editRow's flex flow
+  // entirely, so it doesn't reserve a gap in the row the way a normal flex sibling would.
+  hiddenTagInput: {
+    height: 1,
+    opacity: 0,
+    position: 'absolute',
+    width: 1
   },
   title: {
     flexShrink: 1,

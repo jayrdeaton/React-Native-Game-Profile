@@ -21,6 +21,12 @@ const ZERO_WIDTH_JOINER = String.fromCodePoint(0x200d)
 // segmentation (Intl.Segmenter's own Hermes support is inconsistent enough not to lean on here).
 const EMOJI_PATTERN = new RegExp(`^\\p{Extended_Pictographic}${VARIATION_SELECTOR}?(${ZERO_WIDTH_JOINER}\\p{Extended_Pictographic}${VARIATION_SELECTOR}?)*$`, 'u')
 
+// Presence check, not the full anchored EMOJI_PATTERN above — clampTag below only needs to know
+// whether a just-typed chunk contains a pictograph at all, not whether an entire value is exactly
+// one (possibly ZWJ-joined) emoji. Same distinction @tastic/hud's InlineColorPicker draws for its
+// own font-sizing check.
+const EMOJI_PRESENT = /\p{Extended_Pictographic}/u
+
 // Empty is valid too — a profile can have no tag yet, same as it can go without ever entering an
 // editor's own tag field at all; every place this renders falls back to a generic icon in that case
 // (see ProfileChip).
@@ -28,7 +34,33 @@ export function isValidTag(value: unknown): value is string {
   if (typeof value !== 'string') return false
   if (value.length === 0) return true
   if (EMOJI_PATTERN.test(value)) return true
-  return !/\p{Extended_Pictographic}/u.test(value) && Array.from(value).length <= MAX_TAG_LENGTH
+  return !EMOJI_PRESENT.test(value) && Array.from(value).length <= MAX_TAG_LENGTH
+}
+
+// Clamps a tag field's live value on every keystroke so it's never possible to type your way into
+// a state isValidTag would reject, rather than allowing it and only catching it later (a toast on
+// save, or a swatch preview that overflows/truncates). `previous` is the value before this
+// keystroke, `next` is what the field reports after it.
+export function clampTag(previous: string, next: string): string {
+  const previousCodepoints = Array.from(previous)
+  const nextCodepoints = Array.from(next)
+
+  // Shrinking (backspace/delete, or a selectTextOnFocus-driven wholesale replacement — see
+  // ProfilesManager's own EditRow — reporting its own replacement text as no longer than what it
+  // overwrote) always passes through untouched: there's nothing to clamp about removing content.
+  if (nextCodepoints.length <= previousCodepoints.length) return next
+
+  let sharedPrefixLength = 0
+  while (sharedPrefixLength < previousCodepoints.length && previousCodepoints[sharedPrefixLength] === nextCodepoints[sharedPrefixLength]) sharedPrefixLength++
+  const added = nextCodepoints.slice(sharedPrefixLength).join('')
+
+  // A tag is either a handful of plain characters or exactly one emoji, never a mix — typing more
+  // of either kind on top of the other one starts fresh with just what's newly typed, rather than
+  // producing a combination isValidTag would reject anyway (an emoji followed by letters, or a
+  // second emoji tacked onto the first).
+  if (EMOJI_PRESENT.test(added) || EMOJI_PRESENT.test(previous)) return added
+
+  return nextCodepoints.length > MAX_TAG_LENGTH ? previous : next
 }
 
 // Validates only the fields this package's own `Profile` type declares — an app that extends

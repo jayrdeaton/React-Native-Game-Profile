@@ -179,13 +179,16 @@ function queryDeleteToggle(): any {
   return undefined
 }
 
-function lastTextInputProps(placeholder: string): any {
+// Matches by placeholder (the Name field) or accessibilityLabel (the Tag field, which has no
+// placeholder of its own since it's invisible — see EditRow's own comment on why) so callers can
+// look a field up by "Name"/"Tag" either way, the same as before this field stopped being visible.
+function lastTextInputProps(label: string): any {
   const calls = mockTextInput.mock.calls
   for (let i = calls.length - 1; i >= 0; i--) {
     const props = calls[i][0] as any
-    if (props.placeholder === placeholder) return props
+    if (props.placeholder === label || props.accessibilityLabel === label) return props
   }
-  throw new Error(`No TextInput renders placeholder "${placeholder}"`)
+  throw new Error(`No TextInput renders placeholder/accessibilityLabel "${label}"`)
 }
 
 function lastButtonProps(label: string): any {
@@ -322,18 +325,46 @@ describe('ProfilesManager', () => {
     expect(onSave).toHaveBeenCalledWith('a', { name: 'Alicia', color: '#654321', tag: 'AL' })
   })
 
-  it('drops an invalid tag to empty on save and surfaces an error toast', () => {
-    const alice = createProfile({ id: 'a', name: 'Alice', color: '#654321', tag: 'AL' })
+  // clampTag (see profilesValidation.ts/its own test suite) prevents typing your way into an
+  // invalid tag through this field's own onChangeText, so this now exercises commitEdit's
+  // defensive check via an already-invalid tag loaded straight from a profile's stored data — a
+  // legacy/corrupted value, or one synced in from another app's own looser rules — never touched
+  // through the tag field itself.
+  it('drops an invalid tag loaded from storage to empty on save and surfaces an error toast', () => {
+    const alice = createProfile({ id: 'a', name: 'Alice', color: '#654321', tag: 'WXYZ' })
     const { onSave } = renderManager({ profiles: [alice] })
     act(() => findTouchableRippleByText('Alice').onPress())
-
-    act(() => lastTextInputProps('Tag').onChangeText('WXYZ'))
-    expect(lastTextInputProps('Tag').error).toBe(true)
 
     act(() => lastTextInputProps('Name').onSubmitEditing())
 
     expect(mockErrorToast).toHaveBeenCalledWith('Invalid tag', 'Use up to 3 letters or a single emoji')
     expect(onSave).toHaveBeenCalledWith('a', { name: 'Alice', color: '#654321', tag: '' })
+  })
+
+  it("clamps the tag field's live typing — rejects a keystroke past 3 characters, and a second emoji replaces the first", () => {
+    renderManager()
+    act(() => findTouchableRippleByText('New Profile').onPress())
+
+    act(() => lastTextInputProps('Tag').onChangeText('ABC'))
+    expect(lastTextInputProps('Tag').value).toBe('ABC')
+    act(() => lastTextInputProps('Tag').onChangeText('ABCD'))
+    expect(lastTextInputProps('Tag').value).toBe('ABC')
+
+    act(() => lastTextInputProps('Tag').onChangeText('😎'))
+    expect(lastTextInputProps('Tag').value).toBe('😎')
+    act(() => lastTextInputProps('Tag').onChangeText('😎🔥'))
+    expect(lastTextInputProps('Tag').value).toBe('🔥')
+  })
+
+  // Without this, the hidden field — even at 1x1 and fully transparent — would still sit in front
+  // of the swatch for hit-testing purposes and swallow the tap meant to open the color popover,
+  // since focusing it is always done programmatically (see EditRow's own focus effect), never by
+  // tapping the field directly.
+  it('the hidden tag field never intercepts touches, so it cannot block the swatch underneath', () => {
+    renderManager()
+    act(() => findTouchableRippleByText('New Profile').onPress())
+
+    expect(lastTextInputProps('Tag').pointerEvents).toBe('none')
   })
 
   it('submitting an empty name discards the draft without calling onCreate, and closes the row', () => {
