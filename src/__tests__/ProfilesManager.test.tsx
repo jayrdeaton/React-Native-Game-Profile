@@ -35,10 +35,26 @@ jest.mock('@rific/toaster', () => ({
   useToast: jest.fn()
 }))
 
-jest.mock('@tastic/hud', () => ({
-  InlineColorPicker: jest.fn(() => null),
-  usePopoverHost: jest.fn(() => ({ openId: null, toggle: jest.fn(), close: jest.fn() }))
-}))
+jest.mock('@tastic/hud', () => {
+  // jest.mock factories can't close over module-level imports (hoisted above them), hence its own
+  // require — cast to the real module type so the generics below still typecheck (a bare require()
+  // types as `any`, and TS rejects explicit type arguments on an untyped call).
+  const { useCallback, useState } = require('react') as typeof import('react')
+  return {
+    InlineColorPicker: jest.fn(() => null),
+    // A faithful, self-contained reimplementation of the real hook (see @tastic/hud's own
+    // usePopoverHost.ts) — not jest.requireActual('@tastic/hud'), which would also eagerly
+    // evaluate every other module its index.ts re-exports. Needs to be genuinely stateful (not a
+    // static { openId: null, ... } stub) so the focus-follows-open tests below can drive
+    // host.openId through a real open/close transition.
+    usePopoverHost: jest.fn(() => {
+      const [openId, setOpenId] = useState<string | null>(null)
+      const toggle = useCallback((id: string) => setOpenId((prev: string | null) => (prev === id ? null : id)), [])
+      const close = useCallback(() => setOpenId(null), [])
+      return { openId, toggle, close }
+    })
+  }
+})
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: jest.fn(() => ({ top: 0, bottom: 0, left: 0, right: 0 }))
@@ -184,6 +200,16 @@ function lastButtonProps(label: string): any {
 function lastInlineColorPickerValue(): string {
   const calls = mockInlineColorPicker.mock.calls
   return (calls[calls.length - 1][0] as any).value
+}
+
+function lastInlineColorPickerTag(): string {
+  const calls = mockInlineColorPicker.mock.calls
+  return (calls[calls.length - 1][0] as any).tag
+}
+
+function lastInlineColorPickerHost(): any {
+  const calls = mockInlineColorPicker.mock.calls
+  return (calls[calls.length - 1][0] as any).host
 }
 
 function hasTextContaining(...fragments: string[]): boolean {
@@ -398,5 +424,44 @@ describe('ProfilesManager', () => {
     unmount()
 
     expect(onSave).toHaveBeenCalledWith('a', { name: 'Alicia', color: '#111111', tag: 'A' })
+  })
+
+  it('shows the tag live on the color trigger as it changes', () => {
+    renderManager()
+    act(() => findTouchableRippleByText('New Profile').onPress())
+    expect(lastInlineColorPickerTag()).toBe('')
+
+    act(() => lastTextInputProps('Tag').onChangeText('XY'))
+    expect(lastInlineColorPickerTag()).toBe('XY')
+  })
+
+  // tag.ref is captured straight off TextInput's mocked props here — React 19 passes `ref` through
+  // as a normal prop to a plain (non-forwardRef) function component, same as @rific/focus-chain's
+  // own useFocusChain.test.ts does with its raw { focus: mockFocus } fake.
+  it('opening the color popover focuses the tag field', () => {
+    renderManager()
+    act(() => findTouchableRippleByText('New Profile').onPress())
+
+    const mockFocus = jest.fn()
+    lastTextInputProps('Tag').ref({ focus: mockFocus })
+
+    act(() => lastInlineColorPickerHost().toggle('color'))
+
+    expect(mockFocus).toHaveBeenCalledTimes(1)
+  })
+
+  it('closing the color popover does not refocus the tag field', () => {
+    renderManager()
+    act(() => findTouchableRippleByText('New Profile').onPress())
+
+    const mockFocus = jest.fn()
+    lastTextInputProps('Tag').ref({ focus: mockFocus })
+    const host = lastInlineColorPickerHost()
+    act(() => host.toggle('color'))
+    mockFocus.mockClear()
+
+    act(() => host.toggle('color')) // toggling the same id again closes it
+
+    expect(mockFocus).not.toHaveBeenCalled()
   })
 })

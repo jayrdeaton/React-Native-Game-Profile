@@ -272,10 +272,11 @@ interface EditRowProps {
 
 // One row, expanded: the color trigger (@tastic/hud's InlineColorPicker), a tag field clamped to
 // CHIP_SIZE, the name taking up whatever's
-// left, and — only for an existing profile — a delete icon at the very end. No `tag` passed to the
-// color trigger here — it keeps its plain palette icon regardless of the row's own tag field, since
-// the tag is already right next to it in its own field, so repeating it on the color trigger too
-// would be redundant rather than informative.
+// left, and — only for an existing profile — a delete icon at the very end. `tag={draftTag}` IS
+// passed to the color trigger here (unlike a plain identity badge elsewhere) so it shows the same
+// live draft value the tag field itself does — the two effects below are what wires tapping the
+// swatch to popping the keyboard on the tag field too, so typing a tag and picking a color read as
+// one combined action instead of two separate taps.
 // Return-key chains tag -> name via @rific/focus-chain rather than each field submitting on its
 // own — submitting the *name* field is what actually commits the row, so its registration's own
 // onSubmitEditing (a no-op — it's last in the chain) is overridden with onSubmit below, matching
@@ -285,9 +286,29 @@ function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag,
   const tag = register()
   const name = register()
 
+  // tag.props.focus (from @rific/focus-chain's own register(), not tag.ref — that's a callback
+  // ref, not a ref object, so it has no .current to read) is the hook's own imperative "focus this
+  // exact registered field" call. Mirrored into a ref every render, same as commitEditRef above,
+  // rather than read directly in the effect below: register() returns a brand-new props object on
+  // every render (it isn't memoized), so depending on tag.props.focus directly would rerun that
+  // effect — and refocus an already-focused field — on every keystroke into the tag field itself,
+  // re-triggering its own selectTextOnFocus mid-type and wiping out what's being typed.
+  const tagFocusRef = useRef(tag.props.focus)
+  useEffect(() => {
+    tagFocusRef.current = tag.props.focus
+  })
+
+  // Lets tapping the swatch itself hand focus straight to the tag field, so one tap both opens the
+  // color popover (host.toggle, inside InlineColorPicker's own onPress) and pops the keyboard on
+  // the tag field right next to it. Scoped to host.openId so this only fires on an actual open
+  // transition, not on every re-render while it's already open.
+  useEffect(() => {
+    if (host.openId === 'color') tagFocusRef.current()
+  }, [host.openId])
+
   return (
     <View style={styles.editRow}>
-      <InlineColorPicker id='color' host={host} value={draftColor} onChange={onColorChange} dark={dark} />
+      <InlineColorPicker id='color' host={host} value={draftColor} onChange={onColorChange} tag={draftTag} dark={dark} />
       {/* selectTextOnFocus so tapping into an already-set tag selects it for wholesale replacement
       — the far more common edit than inserting into the middle of a 1-3 character value. */}
       {/* eslint-disable-next-line react-hooks/refs -- tag.ref/tag.props come from useFocusChain's
