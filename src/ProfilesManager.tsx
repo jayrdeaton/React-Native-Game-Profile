@@ -3,7 +3,7 @@ import { TouchableRipple } from '@rific/feedback-press'
 import { useFocusChain } from '@rific/focus-chain'
 import { useToast } from '@rific/toaster'
 import { InlineColorPicker, PopoverHost, usePopoverHost } from '@tastic/hud'
-import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ReactNode, Ref, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native'
 import { Button, Icon, Portal, Text, TextInput } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -22,6 +22,18 @@ interface ProfileEditPatch {
   tag: string
 }
 
+export interface ProfilesManagerHandle {
+  // Flushes whatever row is currently being edited — the same thing this component's own unmount
+  // effect does, but callable explicitly. Exists because "unmount" isn't a reliable "the user is
+  // navigating away" signal on every host: React Navigation's web renderer keeps a popped screen
+  // mounted-but-hidden instead of unmounting it, so a host relying only on the unmount fallback
+  // silently loses an in-progress edit on `router.back()` there. A host whose router doesn't
+  // genuinely unmount this component on navigation should hold a ref and call this right before
+  // navigating away (e.g. in its own back-button handler). Safe to call any time, including when
+  // nothing is being edited — a no-op then, same as the unmount effect already is.
+  commitPendingEdit: () => void
+}
+
 export interface ProfilesManagerProps {
   profiles: Profile[]
   // The color a brand-new profile's draft starts on — this component doesn't have (and shouldn't
@@ -37,6 +49,9 @@ export interface ProfilesManagerProps {
   // rendering slot, not an onBack-style callback: this component doesn't know or care that it's a
   // back button, only that the host wants something shown there. Omit to hide the slot.
   headerLeft?: ReactNode
+  // React 19 accepts `ref` as a plain prop on a function component (no forwardRef needed) — see
+  // ProfilesManagerHandle's own doc for why a host may need this.
+  ref?: Ref<ProfilesManagerHandle>
 }
 
 type Row = { kind: 'profile'; profile: Profile } | { kind: 'new' }
@@ -55,7 +70,11 @@ function deriveTag(name: string): string {
 // would still assume *some* host owns navigation; this component doesn't even go that far), so any
 // consuming screen just renders it as its body inside its own routed wrapper (back button, native
 // push/pop transition, whatever persistence hook backs `profiles`/`onCreate`/`onSave`/`onDelete`).
-export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDelete, headerLeft }: ProfilesManagerProps) {
+// Staying router-agnostic means this component can't know for itself whether "navigating away"
+// really unmounts it on a given host's router — see ProfilesManagerHandle's own doc for the
+// react-navigation-web case where it doesn't, and why a host there needs the `ref` escape hatch
+// instead of relying on the unmount fallback alone.
+export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDelete, headerLeft, ref }: ProfilesManagerProps) {
   const { dark, colors } = useAutoPaperTheme()
   const insets = useSafeAreaInsets()
   const { error: showErrorToast } = useToast()
@@ -116,6 +135,11 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
     commitEditRef.current = commitEdit
   })
   useEffect(() => () => commitEditRef.current(), [])
+  // The explicit escape hatch for hosts whose "navigate away" doesn't genuinely unmount this
+  // component — see ProfilesManagerHandle's own doc. `[]` deps: the handle object itself never
+  // needs to change identity, since it always calls through the ref to whatever commitEdit is
+  // current at call time, the same indirection the unmount effect above already relies on.
+  useImperativeHandle(ref, () => ({ commitPendingEdit: () => commitEditRef.current() }), [])
 
   const startEdit = useCallback(
     (target: 'new' | Profile) => {

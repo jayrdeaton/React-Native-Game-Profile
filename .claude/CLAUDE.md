@@ -15,7 +15,7 @@ npm run build        # tsup, outputs CJS + ESM + types to dist/
 npm run build:watch  # tsup --watch
 npm run lint         # ESLint
 npm run fix          # ESLint --fix
-npm test             # Jest (85 tests)
+npm test             # Jest (99 tests)
 npm run test:watch   # Jest in watch mode
 npm run typecheck    # TypeScript type check (tsc --noEmit)
 npm run verify       # lint + test + typecheck + build, in that order
@@ -64,7 +64,7 @@ From `src/index.ts`:
 
 - `ProfileChip` — identity badge component (`profile`, `size?`, `filled?`)
 - `ProfilePicker` — generic selection-popover component (see Architecture above)
-- `ProfilesManager`, `ProfilesManagerProps` — roster management screen
+- `ProfilesManager`, `ProfilesManagerProps`, `ProfilesManagerHandle` — roster management screen; accepts `ref` (React 19 ref-as-prop, no `forwardRef`) exposing `commitPendingEdit()` — a host whose router doesn't genuinely unmount this component on "back" (React Navigation's web renderer keeps popped screens mounted-but-hidden, unlike native) must call this explicitly from its own back-button handler, or a pending edit is silently lost there. The existing unmount-effect fallback still covers every host where navigating away really does unmount (native, hardware back/swipe-back bypassing a custom back button).
 - `isValidProfile`, `isValidTag`, `MAX_PROFILE_NAME_LENGTH`, `MAX_TAG_LENGTH` — validation
 - `isSharedProfileStoreAvailable`, `loadSharedProfiles`, `saveSharedProfiles` — optional native App Group shared store
 - `Profile` (type only) — the base identity shape
@@ -84,10 +84,10 @@ From `src/index.ts`:
 
 - Framework: Jest (`@infinitetoken/jest-config/react-native`), jsdom environment
 - Mocks in `src/__mocks__/` for `react-native`, `react-native-paper`
-- 85 tests across 5 suites
-- Coverage (measured 2026-08-30): **100 / 92.24 / 100 / 100** (statements/branches/functions/lines),
+- 99 tests across 5 suites
+- Coverage (measured 2026-09-01): **100 / 92.8 / 100 / 100** (statements/branches/functions/lines),
   against the shared preset's 70% floor on all four metrics — no local `coverageThreshold` override.
-  The only branch gaps are in `ProfilesManager.tsx` (lines 50-73, 155-157, 183)
+  The only branch gaps are in `ProfilesManager.tsx` (lines 64-91, 184-211)
 - No local `jest.config.cjs` overrides beyond `moduleNameMapper` for the two `__mocks__/` entries —
   `@infinitetoken/jest-config@0.2.1`'s `/react-native` preset defaults
   `testEnvironmentOptions.customExportConditions: []` itself, needed here since `@tastic/hud` (imported

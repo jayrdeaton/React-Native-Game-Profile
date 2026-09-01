@@ -3,10 +3,11 @@ import { TouchableRipple } from '@rific/feedback-press'
 import { useToast } from '@rific/toaster'
 import { InlineColorPicker } from '@tastic/hud'
 import { act, render } from '@testing-library/react'
+import { createRef } from 'react'
 import { Button, Icon, Text, TextInput } from 'react-native-paper'
 
 import { ProfileChip } from '../ProfileChip'
-import { ProfilesManager, ProfilesManagerProps } from '../ProfilesManager'
+import { ProfilesManager, ProfilesManagerHandle, ProfilesManagerProps } from '../ProfilesManager'
 import { Profile } from '../types'
 
 // ProfileChip is this screen's only child component (see ProfilesManager's own imports) — mocked
@@ -455,6 +456,30 @@ describe('ProfilesManager', () => {
     unmount()
 
     expect(onSave).toHaveBeenCalledWith('a', { name: 'Alicia', color: '#111111', tag: 'A' })
+  })
+
+  // The react-navigation-web case: a host's screen is hidden, not unmounted, when its router pops
+  // it, so the unmount effect above never fires there — commitPendingEdit is the explicit escape
+  // hatch a host calls instead, from its own back-button handler, right before navigating away.
+  it('commitPendingEdit flushes the pending draft through onSave, for hosts whose navigation does not unmount this component', () => {
+    const alice = createProfile({ id: 'a', name: 'Alice', color: '#111111', tag: '' })
+    const ref = createRef<ProfilesManagerHandle>()
+    const { onSave } = renderManager({ profiles: [alice], ref })
+    act(() => findTouchableRippleByText('Alice').onPress())
+    act(() => lastTextInputProps('Name').onChangeText('Alicia'))
+
+    act(() => ref.current?.commitPendingEdit())
+
+    expect(onSave).toHaveBeenCalledWith('a', { name: 'Alicia', color: '#111111', tag: 'A' })
+  })
+
+  it('commitPendingEdit is a safe no-op when nothing is being edited', () => {
+    const ref = createRef<ProfilesManagerHandle>()
+    const { onCreate, onSave } = renderManager({ ref })
+
+    expect(() => act(() => ref.current?.commitPendingEdit())).not.toThrow()
+    expect(onCreate).not.toHaveBeenCalled()
+    expect(onSave).not.toHaveBeenCalled()
   })
 
   it('shows the tag live on the color trigger as it changes', () => {
