@@ -70,7 +70,7 @@
     "@rific/focus-chain": "^0.4.7",
     "@rific/toaster": "^0.6.3",
     "@tastic/core": "^0.1.5",
-    "@tastic/hud": "^0.1.6",
+    "@tastic/hud": "file:.yalc/@tastic/hud",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
     "@types/jest": "^30.0.0",

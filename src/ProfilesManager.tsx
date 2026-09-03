@@ -16,6 +16,11 @@ import { Profile } from './types'
 // size for every circle on this screen, rather than each picking its own.
 const CHIP_SIZE = 40
 
+// react-native-paper's own MD3 Text variant names — mirrored locally rather than importing its
+// internal VariantProp/MD3TypescaleKey (not exported from the package's public entry point), same
+// as @tastic/hud's BaseStatsScreen does for its own identical titleVariant prop.
+type MD3TextVariant = 'displayLarge' | 'displayMedium' | 'displaySmall' | 'headlineLarge' | 'headlineMedium' | 'headlineSmall' | 'titleLarge' | 'titleMedium' | 'titleSmall' | 'labelLarge' | 'labelMedium' | 'labelSmall' | 'bodyLarge' | 'bodyMedium' | 'bodySmall'
+
 interface ProfileEditPatch {
   name: string
   color: string
@@ -52,6 +57,25 @@ export interface ProfilesManagerProps {
   // React 19 accepts `ref` as a plain prop on a function component (no forwardRef needed) — see
   // ProfilesManagerHandle's own doc for why a host may need this.
   ref?: Ref<ProfilesManagerHandle>
+  // Independently optional overrides for this screen's text/card colors — each defaults to the same
+  // literal-black/white-by-appearance formula as before when omitted, so every existing caller
+  // (none of which pass these) renders identically to before. Same convention as @tastic/hud's
+  // BaseStatsScreen fg/cardBg overrides, for a caller with its own app-wide chrome palette instead
+  // of that literal black/white convention. cardBorder/cancelBg/cancelFg have no override, matching
+  // BaseStatsScreen's identical reasoning for cardBorder: their low-alpha/neutral values already
+  // read fine against any cardBg, and (for Cancel specifically) are deliberately neutral rather than
+  // theme-derived so a host's own live gameplay/seat color can't land there by coincidence.
+  fg?: string
+  fgMuted?: string
+  cardBg?: string
+  // 'headlineSmall' (this screen's own default, below), matching BaseStatsScreen's own settled
+  // default and the reasoning behind it — this title sits next to a small headerLeft back-button
+  // glyph the same way, and the previous hardcoded 'displaySmall' read as oversized there too.
+  titleVariant?: MD3TextVariant
+  // Transforms the color swatch grid's own preview per-swatch — forwarded straight to the internal
+  // InlineColorPicker's identical prop (see its own doc). Leaves draftColor/onCreate/onSave's actual
+  // color value untouched; only what's rendered changes.
+  colorPreview?: (hex: string) => string
 }
 
 type Row = { kind: 'profile'; profile: Profile } | { kind: 'new' }
@@ -74,16 +98,16 @@ function deriveTag(name: string): string {
 // really unmounts it on a given host's router — see ProfilesManagerHandle's own doc for the
 // react-navigation-web case where it doesn't, and why a host there needs the `ref` escape hatch
 // instead of relying on the unmount fallback alone.
-export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDelete, headerLeft, ref }: ProfilesManagerProps) {
+export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDelete, headerLeft, ref, fg: fgOverride, fgMuted: fgMutedOverride, cardBg: cardBgOverride, titleVariant = 'headlineSmall', colorPreview }: ProfilesManagerProps) {
   const { dark, colors } = useAutoPaperTheme()
   const insets = useSafeAreaInsets()
   const { error: showErrorToast } = useToast()
   // Only one row is ever in edit mode at a time (see commitEdit, called before any new row opens),
   // so every EditRow instance can safely share this one host instead of each needing its own.
   const host = usePopoverHost()
-  const fg = dark ? '#FFFFFF' : '#000000'
-  const fgMuted = dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'
-  const cardBg = dark ? '#111111' : '#F2F2F2'
+  const fg = fgOverride ?? (dark ? '#FFFFFF' : '#000000')
+  const fgMuted = fgMutedOverride ?? (dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)')
+  const cardBg = cardBgOverride ?? (dark ? '#111111' : '#F2F2F2')
   const cardBorder = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'
   // A contained neutral, not an outlined one — reads as "the other button" next to Delete's solid
   // danger fill, rather than looking unfinished/secondary beside it.
@@ -198,7 +222,7 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
     <>
       <View style={[styles.header, { paddingTop: 8 + insets.top, paddingLeft: 8 + insets.left }]}>
         {headerLeft}
-        <Text variant='displaySmall' style={[styles.title, { color: fg }]}>
+        <Text variant={titleVariant} style={[styles.title, { color: fg }]}>
           Profiles
         </Text>
       </View>
@@ -226,12 +250,12 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
                   </TouchableRipple>
                 )
               }
-              return <EditRow key='new' draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} autoFocus fgMuted={fgMuted} host={host} dark={dark} />
+              return <EditRow key='new' draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} autoFocus fgMuted={fgMuted} host={host} dark={dark} colorPreview={colorPreview} />
             }
 
             const { profile } = row
             if (editingId === profile.id) {
-              return <EditRow key={profile.id} draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} onDelete={() => setConfirmDeleteId(profile.id)} fgMuted={fgMuted} host={host} dark={dark} />
+              return <EditRow key={profile.id} draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} onDelete={() => setConfirmDeleteId(profile.id)} fgMuted={fgMuted} host={host} dark={dark} colorPreview={colorPreview} />
             }
 
             // No delete affordance at rest — tap the row to start editing, which is the one place
@@ -295,6 +319,7 @@ interface EditRowProps {
   fgMuted: string
   host: PopoverHost
   dark: boolean
+  colorPreview?: (hex: string) => string
 }
 
 // One row, expanded: the color trigger (@tastic/hud's InlineColorPicker) — doubling as the tag's
@@ -309,7 +334,7 @@ interface EditRowProps {
 // own — submitting the *name* field is what actually commits the row, so its registration's own
 // onSubmitEditing (a no-op — it's last in the chain) is overridden with onSubmit below, matching
 // how a normal multi-field form reads: fill fields in order, the last one finishes it.
-function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag, onTagChange, onSubmit, onDelete, autoFocus, fgMuted, host, dark }: EditRowProps) {
+function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag, onTagChange, onSubmit, onDelete, autoFocus, fgMuted, host, dark, colorPreview }: EditRowProps) {
   const register = useFocusChain()
   const tag = register()
   const name = register()
@@ -336,7 +361,7 @@ function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag,
 
   return (
     <View style={styles.editRow}>
-      <InlineColorPicker id='color' host={host} value={draftColor} onChange={onColorChange} tag={draftTag} dark={dark} />
+      <InlineColorPicker id='color' host={host} value={draftColor} onChange={onColorChange} previewValue={colorPreview} tag={draftTag} dark={dark} />
       {/* Invisible on purpose (styles.hiddenTagInput: zero footprint, position: 'absolute' so it
       doesn't reserve space in the row's own flex layout) — the swatch above is the only place this
       value is ever meant to be seen. pointerEvents='none' is what actually keeps it out of the
