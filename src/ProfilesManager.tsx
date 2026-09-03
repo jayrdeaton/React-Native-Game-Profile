@@ -405,6 +405,15 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingBottom: 8
   },
+  // 1x1 and fully transparent — there's nothing to see here on purpose (see EditRow's own comment
+  // above the field this styles). position: 'absolute' pulls it out of editRow's flex flow
+  // entirely, so it doesn't reserve a gap in the row the way a normal flex sibling would.
+  hiddenTagInput: {
+    height: 1,
+    opacity: 0,
+    position: 'absolute',
+    width: 1
+  },
   iconButton: {
     alignItems: 'center',
     borderRadius: 8,
@@ -465,15 +474,6 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1
-  },
-  // 1x1 and fully transparent — there's nothing to see here on purpose (see EditRow's own comment
-  // above the field this styles). position: 'absolute' pulls it out of editRow's flex flow
-  // entirely, so it doesn't reserve a gap in the row the way a normal flex sibling would.
-  hiddenTagInput: {
-    height: 1,
-    opacity: 0,
-    position: 'absolute',
-    width: 1
   },
   title: {
     flexShrink: 1,

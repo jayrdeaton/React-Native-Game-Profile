@@ -1,5 +1,15 @@
 {
   "extends": "@infinitetoken/tsconfig/react-native",
+  "compilerOptions": {
+    // The shared preset's "react-native" customCondition is a Metro-bundling concern: several
+    // deps (@rific/*, @tastic/*) list "react-native" before "types" in their exports map, so
+    // with that condition active tsc resolves their raw src/*.ts instead of dist/*.d.ts - pulling
+    // their own peer deps (expo-haptics, react-native-gesture-handler, react-native-reanimated,
+    // react-native-worklets, @shopify/react-native-skia, etc.) into the type-checked program even
+    // when this package never imports them directly. tsc only needs types, so disable the
+    // condition here and let it fall through to "types".
+    "customConditions": []
+  },
   "include": ["src"],
   "exclude": ["src/__mocks__"]
 }
