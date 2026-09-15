@@ -67,7 +67,8 @@ see its own doc comment for why that component is generic over your own `Profile
   TypeScript type.
 
   ```ts
-  // App-side sketch — see BoxHockey's or LightCycles' own useProfiles.tsx for a full example.
+  // Conceptual sketch of the pattern — see "Redux helpers for the shared roster" below for a
+  // ready-made version of it.
   const GROUP_ID = 'group.com.yourteam.yourgames'
   const base = isSharedProfileStoreAvailable ? await loadSharedProfiles(GROUP_ID) : localBaseFallback
   const profiles = base.map((p) => ({ ...p, controlScheme: localExtensions[p.id]?.controlScheme ?? DEFAULT_CONTROL_SCHEME }))
@@ -87,9 +88,42 @@ see its own doc comment for why that component is generic over your own `Profile
   { "expo": { "ios": { "entitlements": { "com.apple.security.application-groups": ["group.com.yourteam.yourgames"] } } } }
   ```
 
-## Install (local dev via yalc)
+### Redux helpers for the shared roster
 
-Not published to the public npm registry yet.
+The cross-app-roster sketch above is a pattern every `@tastic` game was hand-rolling on its own
+(a roster reducer, a per-profile extension table, the initial-load decision, a foreground-resync
+listener). These four pieces are that logic extracted into reusable, Redux-shaped building blocks —
+plain TypeScript, no dependency on `redux`/`react-redux` themselves, so a host app plugs the
+reducer(s) into whatever store it already has:
+
+- **`profilesActions` / `profilesReducer` / `createProfileRecord`** — the base roster as a reducer:
+  `add`/`update`/`remove`/`setAll` actions, plus `createProfileRecord(input)` to mint a complete
+  `Profile` (id + timestamps) ready to dispatch via `profilesActions.add`.
+- **`createProfileExtensionSlice<TExtension>(namespace)`** — a factory for a host app's own
+  per-profile extension fields (a control scheme, a key scheme, ...): returns a
+  `{ actions: { set, remove }, reducer }` pair over a plain `Record<profileId, TExtension>`,
+  namespaced so more than one extension slice in the same app never collides. Not auto-cleared when
+  `profilesReducer` removes a profile — an app already dispatches its own cleanup action(s) on
+  delete, so this stays a self-contained reducer rather than new cross-slice wiring.
+- **`resolveInitialProfiles(groupId, localFallback)`** — the one-time initial-load decision: shared
+  store unavailable → `localFallback` verbatim; shared store empty → seed it from `localFallback`;
+  otherwise the shared roster always wins over a possibly-stale local snapshot.
+- **`useSharedProfilesSync({ groupId, onRemoteChange })`** — keeps a Redux-backed roster in sync for
+  the rest of the app's lifetime: call the returned `syncToShared(next)` right after a local roster
+  change to mirror it out, and `onRemoteChange` fires with a freshly-loaded roster whenever the app
+  returns to the foreground (skipped while a `syncToShared` write is still in flight, so a remote
+  refresh can't clobber a write that hasn't landed yet).
+
+## Install
+
+```bash
+npm install @tastic/profile
+```
+
+Published to the public npm registry via tag-based CI (OIDC trusted publishing — see
+`npm run release:patch`/`:minor`/`:major`); no local linking needed for normal use.
+
+To develop against a local change before it's published, use `yalc` instead:
 
 ```bash
 cd react-native-game-profile
@@ -109,5 +143,10 @@ linked consumer at once.
 `react`, `react-native`, `react-native-paper`, `react-native-safe-area-context`, `@rific/auto-paper`
 (`getContrastColor`, `useAutoPaperTheme`), `@rific/feedback-press` (`TouchableRipple`),
 `@rific/focus-chain` (`useFocusChain`), `@rific/toaster` (`useToast`), `@tastic/hud`
-(`InlineColorPicker`, `PopoverBody`, `PopoverHost`, `useAutoAlign`, `usePopoverHost`) — none of these
-are bundled, so use whatever versions your app already has.
+(`InlineColorPicker`, `PopoverBody`, `PopoverHost`, `useAutoAlign`, `usePopoverHost`), `@tastic/core`
+(a peer of `@tastic/hud` itself) — none of these are bundled, so use whatever versions your app
+already has.
+
+`expo-modules-core` is an *optional* peer — only resolved by `loadSharedProfiles`/`saveSharedProfiles`
+for the native App Group bridge described above; safe to omit entirely on an Android/web-only
+consumer.

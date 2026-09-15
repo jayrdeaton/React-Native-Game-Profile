@@ -15,7 +15,7 @@ npm run build        # tsup, outputs CJS + ESM + types to dist/
 npm run build:watch  # tsup --watch
 npm run lint         # ESLint
 npm run fix          # ESLint --fix
-npm test             # Jest (99 tests)
+npm test             # Jest (135 tests)
 npm run test:watch   # Jest in watch mode
 npm run typecheck    # TypeScript type check (tsc --noEmit)
 npm run verify       # lint + test + typecheck + build, in that order
@@ -41,6 +41,12 @@ src/
   types.ts                  - Profile interface: id, name, color, tag, createdAt, updatedAt
   profilesValidation.ts     - MAX_PROFILE_NAME_LENGTH/MAX_TAG_LENGTH, isValidTag (plain chars or one ZWJ-joined emoji), isValidProfile (base-fields-only validator)
   sharedProfileStore.ts     - optional cross-app roster via a native iOS App Group; lazily/optionally resolves expo-modules-core's TasticProfile native module, degrades to unavailable (empty reads, no-op writes) everywhere else
+  redux/                    - optional Redux-shaped state helpers; no dependency on redux/react-redux, a host app plugs these into its own store
+    createActionCreator.ts    - internal `{ type, match }` action-creator factory shared by the two slices below; not exported from index.ts
+    profilesSlice.ts          - profilesActions (add/update/remove/setAll) + profilesReducer over Profile[], plus createProfileRecord(input) to mint a new Profile
+    profileExtensionSlice.ts  - createProfileExtensionSlice<TExtension>(namespace) factory: a host app's own per-profile fields (control scheme, key scheme, ...) as a namespaced Record<profileId, TExtension> slice
+    resolveInitialProfiles.ts - one-time initial-roster decision: local fallback when the shared store is unavailable/empty, otherwise shared always wins
+    useSharedProfilesSync.ts  - keeps a Redux-backed roster in sync with the shared store: syncToShared() mirrors writes out, an AppState listener refreshes on foreground
   ProfileChip.tsx           - a profile's identity at a glance: filled color circle + tag (or fallback account icon) in a contrast-safe color
   ProfilePicker.tsx         - name trigger + selection popover; generic over an app's own richer Profile type; selection-only (no create/rename/delete)
   ProfilesManager.tsx       - the roster screen: create/rename/recolor/retag/delete inline in the tapped row, with a destructive-delete confirmation card; no navigation of its own
@@ -51,8 +57,12 @@ src/
     ProfileChip.test.tsx
     ProfilePicker.test.tsx
     ProfilesManager.test.tsx
+    profileExtensionSlice.test.ts
+    profilesSlice.test.ts
     profilesValidation.test.ts
+    resolveInitialProfiles.test.ts
     sharedProfileStore.test.ts
+    useSharedProfilesSync.test.ts
 ios/
   TasticProfileModule.swift - Expo Module (`TasticProfile`) wrapping UserDefaults(suiteName:) as a generic group/key JSON bridge; apple-only per expo-module.config.json
   TasticProfile.podspec
@@ -67,6 +77,10 @@ From `src/index.ts`:
 - `ProfilesManager`, `ProfilesManagerProps`, `ProfilesManagerHandle` — roster management screen; accepts `ref` (React 19 ref-as-prop, no `forwardRef`) exposing `commitPendingEdit()` — a host whose router doesn't genuinely unmount this component on "back" (React Navigation's web renderer keeps popped screens mounted-but-hidden, unlike native) must call this explicitly from its own back-button handler, or a pending edit is silently lost there. The existing unmount-effect fallback still covers every host where navigating away really does unmount (native, hardware back/swipe-back bypassing a custom back button).
 - `isValidProfile`, `isValidTag`, `MAX_PROFILE_NAME_LENGTH`, `MAX_TAG_LENGTH` — validation
 - `isSharedProfileStoreAvailable`, `loadSharedProfiles`, `saveSharedProfiles` — optional native App Group shared store
+- `profilesActions`, `profilesReducer`, `createProfileRecord`, `CreateProfileInput`, `UpdateProfilePayload` — base roster as a Redux reducer (add/update/remove/setAll) plus a helper to mint a new `Profile`
+- `createProfileExtensionSlice`, `ProfileExtensionActions`, `ProfileExtensionSlice`, `ProfileExtensionState`, `SetProfileExtensionPayload` — factory for a host app's own namespaced per-profile-id extension slice
+- `resolveInitialProfiles` — one-time initial-roster resolution against the shared store
+- `useSharedProfilesSync`, `UseSharedProfilesSyncOptions`, `UseSharedProfilesSyncResult` — keeps a Redux-backed roster synced with the shared store over the app's lifetime
 - `Profile` (type only) — the base identity shape
 
 ## Peer Dependencies
@@ -84,10 +98,12 @@ From `src/index.ts`:
 
 - Framework: Jest (`@infinitetoken/jest-config/react-native`), jsdom environment
 - Mocks in `src/__mocks__/` for `react-native`, `react-native-paper`
-- 99 tests across 5 suites
-- Coverage (measured 2026-09-01): **100 / 92.8 / 100 / 100** (statements/branches/functions/lines),
+- 135 tests across 9 suites
+- Coverage (measured 2026-09-15): **100 / 94.44 / 98.41 / 100** (statements/branches/functions/lines),
   against the shared preset's 70% floor on all four metrics — no local `coverageThreshold` override.
-  The only branch gaps are in `ProfilesManager.tsx` (lines 64-91, 184-211)
+  Branch gaps are in `ProfilesManager.tsx` (lines 88, 108-115, 208-235); the one function gap is
+  `useSharedProfilesSync.ts`'s no-op `.catch()` handler on `saveSharedProfiles`, never exercised
+  because no test makes that write actually reject
 - No local `jest.config.cjs` overrides beyond `moduleNameMapper` for the two `__mocks__/` entries —
   `@infinitetoken/jest-config@0.2.1`'s `/react-native` preset defaults
   `testEnvironmentOptions.customExportConditions: []` itself, needed here since `@tastic/hud` (imported
