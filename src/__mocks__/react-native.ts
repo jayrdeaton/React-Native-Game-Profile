@@ -12,6 +12,11 @@ const StyleSheet = {
 
 const mockListener = { remove: noop }
 
+const AppState = {
+  addEventListener: jest.fn(() => mockListener),
+  currentState: 'active' as 'active' | 'background' | 'inactive'
+}
+
 const Appearance = {
   getColorScheme: jest.fn(() => 'light' as 'light' | 'dark' | null),
   addChangeListener: jest.fn(() => mockListener)
@@ -22,7 +27,7 @@ const Platform = {
   select: <T extends Record<string, unknown>>(spec: T) => spec.ios ?? spec.default
 }
 
-export { Appearance, Platform, StyleSheet }
+export { AppState, Appearance, Platform, StyleSheet }
 export const StatusBar = stub
 export const View = jest.fn(stub)
 export const ScrollView = jest.fn(stub)
