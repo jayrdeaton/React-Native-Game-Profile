@@ -53,7 +53,17 @@ see its own doc comment for why that component is generic over your own `Profile
 - **`ProfilesManager`** — the roster screen itself: create/rename/recolor/retag/delete, editing
   inline in the row you tap, with a destructive-delete confirmation. No navigation of its own (no
   router, no back button) — a host app renders this as a routed screen's body and supplies its own
-  persistence via `profiles`/`onCreate`/`onSave`/`onDelete`.
+  persistence via `profiles`/`onCreate`/`onSave`/`onDelete`. `onCreate`/`onSave` both take a
+  `ProfileEditPatch` (`{ name, color, tag }`) — exported from this package's own public API (it was
+  a private, unexported interface inside `ProfilesManager.tsx` until `ProfilesScreen` below needed
+  to reference it from its own props).
+- **`ProfilesScreen`** — the routed-screen shell around `ProfilesManager`: the container `View`,
+  theme-derived background/foreground, a back button, and the commit-pending-edit-before-navigate
+  composition every app in the fleet used to hand-roll on its own around `ProfilesManager` (see
+  "Routed screens: `ProfilesScreen`" below). Same `ProfileEditPatch`-shaped
+  `profiles`/`defaultColor`/`onCreate`/`onSave`/`onDelete` as `ProfilesManager` itself, plus
+  `onBack`. Owns its own `ProfilesManagerHandle` ref internally — there's no `ref` prop here, since
+  nothing outside it needs one anymore.
 - **`loadSharedProfiles` / `saveSharedProfiles` / `isSharedProfileStoreAvailable`** — an *optional*
   cross-app roster, shared between multiple apps of yours via a native iOS App Group (same Apple
   Developer Team, same `"com.apple.security.application-groups"` entitlement value on every
@@ -88,13 +98,71 @@ see its own doc comment for why that component is generic over your own `Profile
   { "expo": { "ios": { "entitlements": { "com.apple.security.application-groups": ["group.com.yourteam.yourgames"] } } } }
   ```
 
+### Routed screens: `ProfilesScreen`
+
+`ProfilesScreen` is the routed-screen shell every app in the fleet was hand-rolling on its own
+around `ProfilesManager`: a container `View`, theme-derived bg/fg, a `headerLeft` back button, and
+the two-line `managerRef.current?.commitPendingEdit(); onBack()` composition every app's own
+back-button handler used to write out by hand (see `ProfilesManager`'s own `commitPendingEdit` doc
+above for why that flush matters on a router that doesn't genuinely unmount a popped screen). It
+owns that ref itself — there's no `ref` prop on `ProfilesScreen`, since nothing outside it needs
+one any more.
+
+Same `profiles`/`defaultColor`/`onCreate`/`onSave`/`onDelete` props as `ProfilesManager` — still
+`ProfileEditPatch`-shaped, still deliberately not widened to your own richer `CreateProfileInput`;
+compose any extra required fields (a key/control scheme, whatever's specific to your game) in your
+own closure at the call site, exactly as you already would calling `ProfilesManager` directly —
+plus `onBack`. `fg`/`fgMuted`/`bg`/`cardBg`/`titleVariant`/`colorPreview` are all independently
+optional and forward straight through to the internal `ProfilesManager` (`bg` is new here —
+`ProfilesManager` itself has no `bg`, since it doesn't own a container `View` of its own).
+
+A whole routed screen, wired to your own store, is usually this small:
+
+```tsx
+// app/profiles.tsx
+import { defaultColors } from '@rific/auto-paper'
+import { ProfilesScreen } from '@tastic/profile'
+import { router } from 'expo-router'
+
+import { useGameStats } from '@/hooks/useGameStats'
+import { useProfiles } from '@/hooks/useProfiles'
+
+export default function Profiles() {
+  const { profiles, createProfile, updateProfile, deleteProfile } = useProfiles()
+  // Only for wiring onDelete below — clears a deleted profile's own stats record so it doesn't
+  // stick around as an orphan once the profile itself is gone.
+  const { removeProfileStats } = useGameStats()
+
+  return (
+    <ProfilesScreen
+      profiles={profiles}
+      defaultColor={defaultColors[0].value}
+      onCreate={(patch) => createProfile(patch)}
+      onSave={(id, patch) => updateProfile(id, patch)}
+      onDelete={(id) => {
+        deleteProfile(id)
+        removeProfileStats(id)
+      }}
+      onBack={() => router.back()}
+    />
+  )
+}
+```
+
+`useProfiles`/`useGameStats` are your own app's hooks, not exports of this package — `profiles` is
+whatever `Profile[]` (or your own extended shape) you already keep in Redux/context/state, and
+`createProfile`/`updateProfile`/`deleteProfile` are however you already persist it. `onBack` can be
+anything with no arguments — `router.back()`, a `safeBack()`-style helper that no-ops with no back
+stack behind it, `navigation.goBack()` — `ProfilesScreen` only ever calls it after flushing any
+in-progress inline edit first.
+
 ### Redux helpers for the shared roster
 
 The cross-app-roster sketch above is a pattern every `@tastic` game was hand-rolling on its own
 (a roster reducer, a per-profile extension table, the initial-load decision, a foreground-resync
-listener). These four pieces are that logic extracted into reusable, Redux-shaped building blocks —
-plain TypeScript, no dependency on `redux`/`react-redux` themselves, so a host app plugs the
-reducer(s) into whatever store it already has:
+listener, a per-seat selection reducer). These five pieces are that logic extracted into reusable,
+Redux-shaped building blocks — plain TypeScript, no dependency on `redux`/`react-redux` themselves,
+so a host app plugs the reducer(s) into whatever store it already has:
 
 - **`profilesActions` / `profilesReducer` / `createProfileRecord`** — the base roster as a reducer:
   `add`/`update`/`remove`/`setAll` actions, plus `createProfileRecord(input)` to mint a complete
@@ -113,6 +181,61 @@ reducer(s) into whatever store it already has:
   change to mirror it out, and `onRemoteChange` fires with a freshly-loaded roster whenever the app
   returns to the foreground (skipped while a `syncToShared` write is still in flight, so a remote
   refresh can't clobber a write that hasn't landed yet).
+- **`createProfileSelectionSlice<TSeat>(namespace, defaultState)`** — a factory for the *other*
+  per-seat piece of state: which profile id each seat currently has selected (parallel to
+  `createProfileExtensionSlice` above, but keyed by seat instead of by profile id). Returns a
+  `{ actions: { select, clearProfile }, reducer }` pair over a plain `Record<TSeat, string | null>`.
+  Unlike `createProfileExtensionSlice`, the seat set can't be derived from `TSeat` alone (types
+  don't exist at runtime), so callers pass their own `defaultState` — the same literal object (e.g.
+  `{ 1: null, 2: null }`) every app already declares today. `select({ seat, profileId })` sets one
+  seat's selection directly; `clearProfile(profileId)` walks every seat and nulls out any that
+  currently points at that id — call it when a profile is deleted so no seat is left referencing a
+  ghost id. Always local, like the guest/CPU/override colors below — never part of the shared
+  App Group roster, since who's selected on *this* device is naturally per-app, per-device state.
+
+## Per-seat color persistence
+
+A loadout/lobby screen's color for a given seat is never just "the selected profile's saved
+color" — a seat can be a guest (no profile selected), a CPU opponent, or a profile the player
+manually recolored for a clash-swap without touching the profile itself. Every `@tastic` game
+(AirHockey, BoxHockey, Pong, LightCycles, Snake) ends up needing the same three cooperating pieces
+of state to cover all three cases. This is the established pattern every game should follow — it
+was previously undocumented at the package level, which is exactly why two of the five apps
+(AirHockey, Snake) didn't pick up the third piece below until after they'd already shipped without
+it.
+
+- **`lastGuestColor`** — a `Record<Seat, string>`: what a seat's color was the last time it was a
+  guest (no profile selected). Written only when a guest seat's color changes; a profile-selected
+  seat never reads or writes it.
+- **`lastCpuColor`** — the same idea for the CPU slot, as a single remembered `string` rather than a
+  per-seat record (a CPU opponent only ever occupies one fixed seat in every shipped game so far).
+- **`profileOverride`** — a `Record<Seat, string | null>`: a manual recolor or clash-swap landing on
+  a seat that currently has a profile selected. `null` means "no override — track the profile's own
+  saved color live." Cleared only when that seat's own profile selection genuinely changes, never by
+  merely leaving and returning to the screen.
+
+None of these three are exports of this package today. `lastGuestColor`/`lastCpuColor` predate it
+entirely, and `profileOverride` is still hand-rolled per app — typically alongside
+`createProfileSelectionSlice`'s own selection state, in the same seat-scoped slice (see e.g.
+BoxHockey's `src/redux/seatColorsSlice.ts`) or folded into the app's own `gameSlice.ts` when there's
+no dedicated slice to put it in (see Snake's `src/redux/gameSlice.ts`). This section exists so a new
+app's author reads the convention here first, rather than hand-rolling something that quietly can't
+interop with the rest of the fleet.
+
+The resolution order at a loadout/lobby screen, for one seat:
+
+```ts
+const color = profile
+  ? (profileOverride[seat] ?? profile.color) // profile selected: override wins, else the profile's own color
+  : isCpu
+    ? lastCpuColor // CPU slot: its own remembered color
+    : lastGuestColor[seat] // guest seat: that seat's own remembered color
+```
+
+`lastGuestColor`/`lastCpuColor` are only ever consulted when no profile is selected for that seat at
+all — a profile-selected seat's guest/CPU memory is neither read nor overwritten while it's active,
+so switching a seat back to "guest" later still recalls whatever guest color it had before a profile
+was ever selected there.
 
 ## Install
 
@@ -121,22 +244,7 @@ npm install @tastic/profile
 ```
 
 Published to the public npm registry via tag-based CI (OIDC trusted publishing — see
-`npm run release:patch`/`:minor`/`:major`); no local linking needed for normal use.
-
-To develop against a local change before it's published, use `yalc` instead:
-
-```bash
-cd react-native-game-profile
-npm run build
-yalc publish
-
-cd ../your-game
-yalc add @tastic/profile
-npm install
-```
-
-Re-run `npm run build && yalc push` from this package after any change to propagate it to every
-linked consumer at once.
+`npm run release:patch`/`:minor`/`:major`).
 
 ## Peer dependencies
 

@@ -1,6 +1,6 @@
 {
   "name": "@tastic/profile",
-  "version": "0.4.0",
+  "version": "0.6.0",
   "description": "Player profile identity for local-multiplayer React Native games — a saved name/color/tag a player selects per seat, with a picker, an inline-editable roster screen, and a reusable identity badge, deliberately blind to any app-specific fields (control scheme, stats) an app layers on top",
   "keywords": [
     "react-native",
@@ -63,14 +63,14 @@
   "prettier": "@infinitetoken/eslint-config/prettier",
   "devDependencies": {
     "@infinitetoken/eslint-config": "0.2.0",
-    "@infinitetoken/jest-config": "^0.2.4",
-    "@infinitetoken/tsconfig": "^0.4.1",
-    "@rific/auto-paper": "^0.11.0",
-    "@rific/core": "^0.1.1",
+    "@infinitetoken/jest-config": "^0.4.0",
+    "@infinitetoken/tsconfig": "^0.5.0",
+    "@rific/auto-paper": "^0.12.0",
+    "@rific/core": "^0.2.0",
     "@rific/feedback-press": "^0.11.1",
     "@rific/focus-chain": "^0.4.7",
     "@rific/toaster": "^0.6.3",
-    "@tastic/core": "^0.2.0",
+    "@tastic/core": "^0.8.0",
     "@tastic/hud": "^0.8.5",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",

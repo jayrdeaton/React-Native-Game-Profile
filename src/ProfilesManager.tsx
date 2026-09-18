@@ -21,7 +21,10 @@ const CHIP_SIZE = 40
 // as @tastic/hud's BaseStatsScreen does for its own identical titleVariant prop.
 type MD3TextVariant = 'displayLarge' | 'displayMedium' | 'displaySmall' | 'headlineLarge' | 'headlineMedium' | 'headlineSmall' | 'titleLarge' | 'titleMedium' | 'titleSmall' | 'labelLarge' | 'labelMedium' | 'labelSmall' | 'bodyLarge' | 'bodyMedium' | 'bodySmall'
 
-interface ProfileEditPatch {
+// Exported (not just used internally) so a host composing a screen around this component — e.g.
+// @tastic/profile's own ProfilesScreen — can reference this exact shape in its own onCreate/onSave
+// prop types without redeclaring it.
+export interface ProfileEditPatch {
   name: string
   color: string
   tag: string
