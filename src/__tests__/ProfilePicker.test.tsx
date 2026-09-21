@@ -3,11 +3,11 @@ import { TouchableRipple } from '@rific/feedback-press'
 import type { PopoverHost } from '@tastic/hud'
 import { PopoverBody, useAutoAlign } from '@tastic/hud'
 import { render } from '@testing-library/react'
-import { ScrollView } from 'react-native'
+import { ScrollView, View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
 
 import { ProfileChip } from '../ProfileChip'
-import { ProfilePicker } from '../ProfilePicker'
+import { getProfilePickerContentSize, ProfilePicker, ProfilePickerAlignResult } from '../ProfilePicker'
 import { Profile } from '../types'
 
 // These three cross-package peers are the real thing everywhere else in this fleet (never
@@ -55,6 +55,7 @@ const mockProfileChip = ProfileChip as unknown as jest.Mock
 const mockIcon = Icon as unknown as jest.Mock
 const mockText = Text as unknown as jest.Mock
 const mockScrollView = ScrollView as unknown as jest.Mock
+const mockView = View as unknown as jest.Mock
 
 const ZOE: Profile = { id: 'zoe', name: 'Zoe', color: '#ff0000', tag: 'Z', createdAt: 3, updatedAt: 3 }
 const AMY: Profile = { id: 'amy', name: 'Amy', color: '#00ff00', tag: 'A', createdAt: 1, updatedAt: 1 }
@@ -84,6 +85,8 @@ interface Overrides {
   color?: string
   dark?: boolean
   align?: 'left' | 'right' | 'center'
+  alignOverride?: ProfilePickerAlignResult
+  rotation?: 0 | 90 | -90 | 180
   guestLabel?: string
   nullLabel?: string
   nullIcon?: string
@@ -94,7 +97,7 @@ interface Overrides {
 function renderPicker(overrides: Overrides = {}) {
   const host = overrides.host ?? makeHost(null)
   const onSelect = overrides.onSelect ?? jest.fn()
-  const utils = render(<ProfilePicker idPrefix={ID_PREFIX} host={host} profiles={overrides.profiles ?? PROFILES} selectedId={overrides.selectedId ?? null} takenId={overrides.takenId} color={overrides.color ?? '#123456'} dark={overrides.dark ?? false} align={overrides.align} guestLabel={overrides.guestLabel ?? 'guest'} nullLabel={overrides.nullLabel} nullIcon={overrides.nullIcon} onSelect={onSelect} onManage={overrides.onManage} />)
+  const utils = render(<ProfilePicker idPrefix={ID_PREFIX} host={host} profiles={overrides.profiles ?? PROFILES} selectedId={overrides.selectedId ?? null} takenId={overrides.takenId} color={overrides.color ?? '#123456'} dark={overrides.dark ?? false} align={overrides.align} alignOverride={overrides.alignOverride} rotation={overrides.rotation} guestLabel={overrides.guestLabel ?? 'guest'} nullLabel={overrides.nullLabel} nullIcon={overrides.nullIcon} onSelect={onSelect} onManage={overrides.onManage} />)
   return { ...utils, host, onSelect }
 }
 
@@ -103,6 +106,10 @@ const findText = (children: unknown) => mockText.mock.calls.find((call) => textC
 const findIcon = (source: string) => mockIcon.mock.calls.find((call) => (call[0] as { source?: string }).source === source)?.[0] as { color?: string } | undefined
 const pressOf = (call: unknown) => (call as [{ onPress?: () => void }])[0].onPress
 const styleOf = (call: unknown) => (call as [{ style?: unknown[] }])[0].style
+// The one View ProfilePicker attaches the trigger ref to - the only `collapsable={false}` View it
+// renders. (React 19 hands `ref` to a function component as an ordinary prop, so the shared View
+// mock sees it in its props.)
+const triggerViewProps = () => mockView.mock.calls.map((call) => call[0] as { collapsable?: boolean; ref?: unknown }).find((props) => props.collapsable === false) as { collapsable?: boolean; ref?: unknown }
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -302,6 +309,113 @@ describe('ProfilePicker', () => {
       renderPicker({ host: makeHost(TRIGGER_ID), color: '#123456', dark: true })
       const style = styleOf(mockScrollView.mock.calls[0])
       expect(style).toEqual(expect.arrayContaining([expect.objectContaining({ backgroundColor: '#000000', borderColor: '#123456', width: 220, maxHeight: 400 })]))
+    })
+  })
+
+  describe('default placement (no alignOverride/rotation)', () => {
+    it('calls useAutoAlign with exactly (open, popover width, content height, rotation 0) - unchanged from before these props existed', () => {
+      renderPicker({ host: makeHost(null) })
+      expect(mockUseAutoAlign).toHaveBeenCalledTimes(1)
+      expect(mockUseAutoAlign).toHaveBeenCalledWith(false, 220, 160, 0)
+    })
+
+    it("passes open=true once its own trigger id is the host's open one", () => {
+      renderPicker({ host: makeHost(TRIGGER_ID) })
+      expect(mockUseAutoAlign).toHaveBeenCalledWith(true, 220, 160, 0)
+    })
+
+    it("attaches the hook's own triggerRef to the measured trigger view", () => {
+      renderPicker({ host: makeHost(TRIGGER_ID) })
+      const autoRef = (mockUseAutoAlign.mock.results[0].value as ProfilePickerAlignResult).triggerRef
+      expect(triggerViewProps().ref).toBe(autoRef)
+    })
+
+    it('forwards an explicit rotation to useAutoAlign', () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), rotation: 90 })
+      expect(mockUseAutoAlign).toHaveBeenCalledWith(true, 220, 160, 90)
+      jest.clearAllMocks()
+      renderPicker({ host: makeHost(TRIGGER_ID), rotation: -90 })
+      expect(mockUseAutoAlign).toHaveBeenCalledWith(true, 220, 160, -90)
+    })
+  })
+
+  describe('alignOverride', () => {
+    const overrideRef = { current: null }
+    const override: ProfilePickerAlignResult = { align: 'left', verticalAlign: 'above', maxHeight: 123, measured: true, triggerRef: overrideRef }
+
+    it("drives the popover's alignment, vertical side and visibility from the override instead of the hook's result", () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), alignOverride: override })
+      // useAutoAlign's own (mocked) result is center/below/measured - none of it may leak through.
+      expect(mockPopoverBody.mock.calls[0][0]).toMatchObject({ visible: true, align: 'left', verticalAlign: 'above' })
+    })
+
+    it("sizes the menu ScrollView's maxHeight from the override", () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), alignOverride: override })
+      expect(styleOf(mockScrollView.mock.calls[0])).toEqual(expect.arrayContaining([expect.objectContaining({ maxHeight: 123 })]))
+    })
+
+    it("gates visibility on the override's own `measured`, not the hook's", () => {
+      // The hook (mocked) says measured=true; the override says its measurement hasn't landed yet.
+      renderPicker({ host: makeHost(TRIGGER_ID), alignOverride: { ...override, measured: false } })
+      expect(mockPopoverBody.mock.calls[0][0]).toMatchObject({ visible: false })
+    })
+
+    it('shows the popover once the override is measured even when the hook itself never measured', () => {
+      mockUseAutoAlign.mockReturnValueOnce({ align: 'center', maxHeight: 400, measured: false, triggerRef: { current: null }, verticalAlign: 'below' })
+      renderPicker({ host: makeHost(TRIGGER_ID), alignOverride: override })
+      expect(mockPopoverBody.mock.calls[0][0]).toMatchObject({ visible: true })
+    })
+
+    it("attaches the override's triggerRef (not the hook's) to the measured trigger view", () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), alignOverride: override })
+      const autoRef = (mockUseAutoAlign.mock.results[0].value as ProfilePickerAlignResult).triggerRef
+      expect(triggerViewProps().ref).toBe(overrideRef)
+      expect(triggerViewProps().ref).not.toBe(autoRef)
+    })
+
+    it('still calls useAutoAlign (hooks cannot be conditional), sized identically', () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), alignOverride: override })
+      expect(mockUseAutoAlign).toHaveBeenCalledWith(true, 220, 160, 0)
+    })
+
+    it("has the same shape as what @tastic/hud's own useAutoAlign returns (compile-time guard, both directions)", () => {
+      const asOverride = (result: ReturnType<typeof useAutoAlign>): ProfilePickerAlignResult => result
+      const asHookResult = (result: ProfilePickerAlignResult): ReturnType<typeof useAutoAlign> => result
+      expect(asHookResult(asOverride(override))).toBe(override)
+    })
+
+    it("lets a forced `align` still beat the override's own align", () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), alignOverride: override, align: 'right' })
+      expect(mockPopoverBody.mock.calls[0][0]).toMatchObject({ align: 'right', verticalAlign: 'above' })
+    })
+  })
+
+  describe('getProfilePickerContentSize', () => {
+    it.each([
+      [0, 52],
+      [1, 88],
+      [2, 124],
+      [5, 232]
+    ])('is 220 wide and %i profile(s) tall = 8*2 + (n + 1) * 36 = %i without a manage row', (profileCount, height) => {
+      expect(getProfilePickerContentSize(profileCount)).toEqual({ width: 220, height })
+    })
+
+    it.each([
+      [0, 88],
+      [1, 124],
+      [2, 160],
+      [5, 268]
+    ])('adds exactly one 36pt row for the manage row: %i profile(s) -> %i', (profileCount, height) => {
+      expect(getProfilePickerContentSize(profileCount, true)).toEqual({ width: 220, height })
+    })
+
+    it('is the exact size the component hands useAutoAlign, with and without a manage row', () => {
+      for (const hasManage of [false, true]) {
+        jest.clearAllMocks()
+        renderPicker({ host: makeHost(null), onManage: hasManage ? jest.fn() : undefined })
+        const { width, height } = getProfilePickerContentSize(PROFILES.length, hasManage)
+        expect(mockUseAutoAlign).toHaveBeenCalledWith(false, width, height, 0)
+      }
     })
   })
 })

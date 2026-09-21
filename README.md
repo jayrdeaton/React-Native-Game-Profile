@@ -49,7 +49,11 @@ see its own doc comment for why that component is generic over your own `Profile
 - **`ProfilePicker`** — a name trigger + selection popover: pick an existing profile, fall back to a
   null/"guest" selection, or (if `onManage` is passed) navigate to a management screen. Selection
   only — creating, renaming, and deleting all live in `ProfilesManager`. Generic over your own
-  `Profile` type (see above).
+  `Profile` type (see above). Placement props (all optional, see "Fake-rotated frames" below):
+  `align` (force a horizontal side), `alignOverride` (substitute the whole placement result), and
+  `rotation` (forwarded to the automatic measurement). Also exports
+  `getProfilePickerContentSize(profileCount, hasManageRow?)` — the popover's
+  `{ width, height }`, for sizing your own placement hook.
 - **`ProfilesManager`** — the roster screen itself: create/rename/recolor/retag/delete, editing
   inline in the row you tap, with a destructive-delete confirmation. No navigation of its own (no
   router, no back button) — a host app renders this as a routed screen's body and supplies its own
@@ -97,6 +101,40 @@ see its own doc comment for why that component is generic over your own `Profile
   // app.json
   { "expo": { "ios": { "entitlements": { "com.apple.security.application-groups": ["group.com.yourteam.yourgames"] } } } }
   ```
+
+### Fake-rotated frames: `ProfilePicker` placement
+
+`ProfilePicker` positions its popover with `@tastic/hud`'s `useAutoAlign`, which measures the
+trigger with `measureInWindow` and compares that rect against the raw window. Inside a *fake*
+rotation (a `View` turned +-90deg while the OS stays portrait-locked) the rect is in true screen
+space but the frame is not, so the hook measures along the wrong axes and can pick the wrong side —
+flipping the list upward off-screen, or running it past the frame's bottom. Two optional props give
+you the same seam `@tastic/hud`'s `InlineColorPicker` has:
+
+| Prop | Type | Default | Effect |
+| --- | --- | --- | --- |
+| `align` | `'left' \| 'right' \| 'center'` | — | Forces the horizontal side; always beats the placement's own `align`. |
+| `alignOverride` | `ProfilePickerAlignResult` (`{ align, verticalAlign, maxHeight, measured, triggerRef }`, the same shape as `useAutoAlign`'s return / `@tastic/hud`'s `AlignResult`) | — | Replaces the automatic placement wholesale: its `align`/`verticalAlign`/`maxHeight`/`measured` drive the popover, and its `triggerRef` is the ref attached to the measured trigger. |
+| `rotation` | `0 \| 90 \| -90 \| 180` | `0` | Forwarded to the automatic `useAutoAlign` call (needs `@tastic/hud` >= 0.8.0). Ignored when `alignOverride` is given. |
+
+With none of them set the picker behaves exactly as it always has. Note `rotation` is never read
+from an ambient provider here (unlike `@tastic/hud`'s own pickers) — this package doesn't touch
+`@tastic/core` at runtime — so pass it explicitly.
+
+To supply your own placement, run a rotation-aware placement hook against the popover's real size,
+using `getProfilePickerContentSize` so the two can't drift:
+
+```tsx
+const open = host.openId === `${idPrefix}-profile`
+const { width, height } = getProfilePickerContentSize(profiles.length, !!onManage)
+const placement = useMyRotatedAlign(open, width, height) // returns a ProfilePickerAlignResult
+
+<ProfilePicker idPrefix={idPrefix} host={host} profiles={profiles} /* ... */ alignOverride={placement} />
+```
+
+`getProfilePickerContentSize(profileCount, hasManageRow = false)` returns `{ width, height }`: 220
+wide, and `8 * 2 + (profileCount + 1 + (hasManageRow ? 1 : 0)) * 36` tall (the null/"guest" row, one
+row per profile, and the Manage row when `onManage` is passed).
 
 ### Routed screens: `ProfilesScreen`
 

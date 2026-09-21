@@ -1,7 +1,7 @@
 import { getContrastColor } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
-import { PopoverBody, PopoverHost, useAutoAlign } from '@tastic/hud'
-import { useMemo } from 'react'
+import { PopoverBody, PopoverHost, PopoverRotation, useAutoAlign } from '@tastic/hud'
+import { RefObject, useMemo } from 'react'
 import { ScrollView, StyleSheet, View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
 
@@ -12,6 +12,39 @@ const TRIGGER_HEIGHT = 28
 const POPOVER_WIDTH = 220
 const ROW_HEIGHT = 36
 const LIST_PADDING = 8
+
+// A complete placement decision for the popover: which way it opens, how tall it may grow, whether
+// this open's measurement has landed yet, and the ref attached to the measured trigger.
+// Structurally identical to @tastic/hud's own `AlignResult` (exported from hud >= 0.12.0, and the
+// same shape `useAutoAlign` itself returns) — declared here rather than imported so this package's
+// public types don't start requiring a newer @tastic/hud than its peer range already admits. A
+// hud `AlignResult` (e.g. from `useZoneClampedAlign`) is assignable to this as-is.
+export interface ProfilePickerAlignResult {
+  align: 'left' | 'right' | 'center'
+  verticalAlign: 'below' | 'above'
+  maxHeight: number
+  measured: boolean
+  triggerRef: RefObject<View | null>
+}
+
+export interface ProfilePickerContentSize {
+  width: number
+  height: number
+}
+
+// The popover's content footprint for a given roster size: always POPOVER_WIDTH wide, tall enough
+// for the null/"guest" row + one row per profile + (when `hasManageRow`, i.e. when the picker is
+// given an `onManage`) the trailing Manage row, plus the list's own padding. This is the size
+// ProfilePicker hands to `useAutoAlign` — the ONE formula, used by the component itself (it leaves
+// out the menu's 2pt border and the Manage divider, ~13pt in all, so treat it as a placement
+// estimate, not a pixel-exact measurement) — exported
+// so a host supplying its own placement through `alignOverride` can size that placement hook (its
+// own useAutoAlign/useZoneClampedAlign call) to match the popover it is actually positioning,
+// instead of copying these constants and drifting whenever they change here.
+export function getProfilePickerContentSize(profileCount: number, hasManageRow = false): ProfilePickerContentSize {
+  const rowCount = profileCount + 1 + (hasManageRow ? 1 : 0)
+  return { width: POPOVER_WIDTH, height: LIST_PADDING * 2 + rowCount * ROW_HEIGHT }
+}
 
 interface ProfilePickerProps<P extends Profile> {
   // Namespaces this trigger's id — pass something unique per instance whenever more than one of
@@ -31,7 +64,30 @@ interface ProfilePickerProps<P extends Profile> {
   // trigger reads as one identity with whatever it's paired with.
   color: string
   dark: boolean
+  // Forces a specific horizontal alignment, beating whatever the placement (the automatic
+  // measurement, or `alignOverride` below) would have picked. Omit to let placement decide.
   align?: 'left' | 'right' | 'center'
+  // Substitutes the popover's whole placement — horizontal/vertical alignment, max height, the
+  // `measured` gate and the trigger ref — for the automatic `useAutoAlign` one, for a host whose
+  // trigger sits somewhere that hook's plain window-relative measurement gets wrong. The motivating
+  // case is a FAKE-rotated frame (a View turned +-90deg while the OS stays portrait-locked):
+  // `measureInWindow` reports a rect in true screen space, `useAutoAlign` compares it against the
+  // raw portrait window, and so measures along the wrong axes — flipping the list upward off-screen
+  // or running it past the frame's bottom. The host runs its own rotation-aware placement hook
+  // (sized with `getProfilePickerContentSize`, passing `open` from its own `host.openId === ...`
+  // check) and hands the result in here; `align` above still wins over this result's own `align`.
+  // The result's `triggerRef` is the one attached to the measured trigger, so the hook that
+  // produced it is measuring the right element. Omit for the default automatic placement.
+  alignOverride?: ProfilePickerAlignResult
+  // Rotation of an ancestor frame turned by a fake landscape (or equivalent), forwarded to the
+  // automatic `useAutoAlign` measurement — the same seam @tastic/hud's InlineColorPicker/
+  // SectionedDropdown expose (needs @tastic/hud >= 0.8.0; older versions ignore it). Defaults to 0
+  // (measurement used as-is), which is exactly how this picker behaved before this prop existed.
+  // Deliberately NOT read from an ambient provider the way hud's own pickers do: this component
+  // never touches @tastic/core at runtime, and an ambient read would silently change placement for
+  // every existing caller already living under a rotation provider. Ignored when `alignOverride` is
+  // supplied (the override replaces the placement this feeds).
+  rotation?: PopoverRotation
   // Trigger's own idle-state text (uppercased here regardless of casing passed in) — shown until a
   // profile is selected.
   guestLabel: string
@@ -63,7 +119,7 @@ interface ProfilePickerProps<P extends Profile> {
 // it keeps this popover from needing its own destructive-delete confirmation. Fully prop-driven —
 // no internal profile-storage access of its own, so the host app stays the one place that reads
 // its own persistence hook.
-export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, selectedId, takenId, color, dark, align: alignOverride, guestLabel, nullLabel = 'Player', nullIcon = 'account-off-outline', onSelect, onManage }: ProfilePickerProps<P>) {
+export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, selectedId, takenId, color, dark, align: forcedAlign, alignOverride, rotation = 0, guestLabel, nullLabel = 'Player', nullIcon = 'account-off-outline', onSelect, onManage }: ProfilePickerProps<P>) {
   const id = `${idPrefix}-profile`
   const menuBg = dark ? '#000000' : '#FFFFFF'
   const fg = dark ? '#FFFFFF' : '#000000'
@@ -74,10 +130,14 @@ export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, sel
   // most from staying scannable once there are more than a handful of saved profiles.
   const sortedProfiles = useMemo(() => [...profiles].sort((a, b) => a.name.localeCompare(b.name)), [profiles])
   // Null row + each saved profile + (if passed) the manage row.
-  const rowCount = profiles.length + 1 + (onManage ? 1 : 0)
-  const contentHeight = LIST_PADDING * 2 + rowCount * ROW_HEIGHT
-  const { align: autoAlign, maxHeight, measured, triggerRef, verticalAlign } = useAutoAlign(open, POPOVER_WIDTH, contentHeight)
-  const align = alignOverride ?? autoAlign
+  const { width: contentWidth, height: contentHeight } = getProfilePickerContentSize(profiles.length, !!onManage)
+  // Always called, even when `alignOverride` is supplied and this result goes unused — hooks can't
+  // be conditional (see @tastic/hud's InlineColorPicker for the identical pattern). With an
+  // override its triggerRef is never attached, so this hook's own measurement is a no-op.
+  const auto = useAutoAlign(open, contentWidth, contentHeight, rotation)
+  const placement = alignOverride ?? auto
+  const { maxHeight, measured, triggerRef, verticalAlign } = placement
+  const align = forcedAlign ?? placement.align
 
   const handleSelectGuest = () => {
     onSelect(null)
