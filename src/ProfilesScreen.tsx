@@ -3,7 +3,7 @@ import { IconButton } from '@rific/feedback-press'
 import { useRef } from 'react'
 import { StyleSheet, View } from 'react-native'
 
-import { ProfileEditPatch, ProfilesManager, ProfilesManagerHandle } from './ProfilesManager'
+import { ProfileEditPatch, ProfilesManager, ProfilesManagerHandle, ProfilesManagerProps } from './ProfilesManager'
 import { Profile } from './types'
 
 // react-native-paper's own MD3 Text variant names — mirrored locally rather than importing its
@@ -40,6 +40,10 @@ export interface ProfilesScreenProps {
   cardBg?: string
   titleVariant?: MD3TextVariant
   colorPreview?: (hex: string) => string
+  // Forwarded straight through to the internal ProfilesManager - a placement hook for the color swatch popover, for
+  // a host inside a fake-rotated frame. See ProfilesManagerProps.useColorPickerAlign for what it is and its hud >= 0.12.0
+  // requirement.
+  useColorPickerAlign?: ProfilesManagerProps['useColorPickerAlign']
 }
 
 // The routed profiles-roster screen shell every app in this fleet hand-rolls around ProfilesManager
@@ -49,7 +53,7 @@ export interface ProfilesScreenProps {
 // still doesn't call useProfiles()/useGameStats() (or any host-specific hook) itself — those two
 // hooks' shapes are genuinely app-specific (different CreateProfileInput/GameStatsContextValue per
 // app), so this stays props-in/callbacks-out, exactly like ProfilesManager itself.
-export function ProfilesScreen({ profiles, defaultColor, onCreate, onSave, onDelete, onBack, fg: fgOverride, fgMuted, bg: bgOverride, cardBg, titleVariant, colorPreview }: ProfilesScreenProps) {
+export function ProfilesScreen({ profiles, defaultColor, onCreate, onSave, onDelete, onBack, fg: fgOverride, fgMuted, bg: bgOverride, cardBg, titleVariant, colorPreview, useColorPickerAlign }: ProfilesScreenProps) {
   const { dark } = useAutoPaperTheme()
   // Owns the ref itself — nothing outside this component ever needs it, since this is now the one
   // thing that both renders ProfilesManager AND owns the only navigation trigger next to it.
@@ -71,7 +75,7 @@ export function ProfilesScreen({ profiles, defaultColor, onCreate, onSave, onDel
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
-      <ProfilesManager ref={managerRef} profiles={profiles} defaultColor={defaultColor} onCreate={onCreate} onSave={onSave} onDelete={onDelete} fg={fg} fgMuted={fgMuted} cardBg={cardBg} titleVariant={titleVariant} colorPreview={colorPreview} headerLeft={<IconButton icon='arrow-left' iconColor={fg} size={24} onPress={handleBack} accessibilityLabel='Back' />} />
+      <ProfilesManager ref={managerRef} profiles={profiles} defaultColor={defaultColor} onCreate={onCreate} onSave={onSave} onDelete={onDelete} fg={fg} fgMuted={fgMuted} cardBg={cardBg} titleVariant={titleVariant} colorPreview={colorPreview} useColorPickerAlign={useColorPickerAlign} headerLeft={<IconButton icon='arrow-left' iconColor={fg} size={24} onPress={handleBack} accessibilityLabel='Back' />} />
     </View>
   )
 }

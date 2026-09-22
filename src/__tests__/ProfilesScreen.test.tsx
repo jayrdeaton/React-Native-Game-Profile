@@ -131,6 +131,15 @@ describe('ProfilesScreen', () => {
     expect(headerLeft.props.accessibilityLabel).toBe('Back')
   })
 
+  it('forwards useColorPickerAlign straight through to ProfilesManager, and omits it when not given', () => {
+    renderScreen()
+    expect(lastManagerProps().useColorPickerAlign).toBeUndefined()
+
+    const useColorPickerAlign = jest.fn()
+    renderScreen({ useColorPickerAlign })
+    expect(lastManagerProps().useColorPickerAlign).toBe(useColorPickerAlign)
+  })
+
   it('the back button commits any pending edit through the ProfilesManager ref, then calls onBack', () => {
     const commitPendingEdit = jest.fn()
     const { onBack } = renderScreen()

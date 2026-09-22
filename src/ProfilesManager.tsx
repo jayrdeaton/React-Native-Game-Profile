@@ -1,14 +1,15 @@
-import { useAutoPaperTheme } from '@rific/auto-paper'
+import { defaultColors, useAutoPaperTheme } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
 import { useFocusChain } from '@rific/focus-chain'
 import { useToast } from '@rific/toaster'
-import { InlineColorPicker, PopoverHost, usePopoverHost } from '@tastic/hud'
-import { ReactNode, Ref, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native'
+import { getInlineColorPickerContentSize, InlineColorPicker, PopoverHost, usePopoverHost } from '@tastic/hud'
+import { ComponentProps, ReactNode, Ref, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Button, Icon, Portal, Text, TextInput } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ProfileChip } from './ProfileChip'
+import { type ProfilePickerAlignResult } from './ProfilePicker'
 import { clampTag, isValidTag, MAX_PROFILE_NAME_LENGTH } from './profilesValidation'
 import { Profile } from './types'
 
@@ -79,6 +80,18 @@ export interface ProfilesManagerProps {
   // InlineColorPicker's identical prop (see its own doc). Leaves draftColor/onCreate/onSave's actual
   // color value untouched; only what's rendered changes.
   colorPreview?: (hex: string) => string
+  // Substitutes the color swatch popover's own placement, for a host that renders this screen inside a
+  // FAKE-rotated frame (a View turned +-90deg while the OS stays portrait-locked). @tastic/hud's
+  // InlineColorPicker places its popover with useAutoAlign, which compares a screen-space
+  // measureInWindow rect against the raw portrait window and (through its ambient rotation) double-rotates
+  // an already-transformed rect - so under a fake rotation it lands off its trigger. A host that knows its
+  // frame passes its own placement HOOK here; it is called with the swatch popover's open state and content
+  // size, and its result is handed to InlineColorPicker as `alignOverride` (its `triggerRef` is what gets
+  // measured). It is a hook, not a plain function: give it a STABLE identity for the life of the mount (a
+  // module-level function) - switching it at runtime remounts the swatch. Omit for the ordinary case;
+  // behaviour is then identical to before. Needs @tastic/hud >= 0.12.0 to have any effect (older hud has no
+  // `alignOverride` and ignores it).
+  useColorPickerAlign?: (open: boolean, contentWidth: number, contentHeight: number) => ProfilePickerAlignResult
 }
 
 type Row = { kind: 'profile'; profile: Profile } | { kind: 'new' }
@@ -101,7 +114,7 @@ function deriveTag(name: string): string {
 // really unmounts it on a given host's router — see ProfilesManagerHandle's own doc for the
 // react-navigation-web case where it doesn't, and why a host there needs the `ref` escape hatch
 // instead of relying on the unmount fallback alone.
-export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDelete, headerLeft, ref, fg: fgOverride, fgMuted: fgMutedOverride, cardBg: cardBgOverride, titleVariant = 'headlineSmall', colorPreview }: ProfilesManagerProps) {
+export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDelete, headerLeft, ref, fg: fgOverride, fgMuted: fgMutedOverride, cardBg: cardBgOverride, titleVariant = 'headlineSmall', colorPreview, useColorPickerAlign }: ProfilesManagerProps) {
   const { dark, colors } = useAutoPaperTheme()
   const insets = useSafeAreaInsets()
   const { error: showErrorToast } = useToast()
@@ -253,12 +266,12 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
                   </TouchableRipple>
                 )
               }
-              return <EditRow key='new' draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} autoFocus fgMuted={fgMuted} host={host} dark={dark} colorPreview={colorPreview} />
+              return <EditRow key='new' draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} autoFocus fgMuted={fgMuted} host={host} dark={dark} colorPreview={colorPreview} useColorPickerAlign={useColorPickerAlign} />
             }
 
             const { profile } = row
             if (editingId === profile.id) {
-              return <EditRow key={profile.id} draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} onDelete={() => setConfirmDeleteId(profile.id)} fgMuted={fgMuted} host={host} dark={dark} colorPreview={colorPreview} />
+              return <EditRow key={profile.id} draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} onDelete={() => setConfirmDeleteId(profile.id)} fgMuted={fgMuted} host={host} dark={dark} colorPreview={colorPreview} useColorPickerAlign={useColorPickerAlign} />
             }
 
             // No delete affordance at rest — tap the row to start editing, which is the one place
@@ -323,6 +336,19 @@ interface EditRowProps {
   host: PopoverHost
   dark: boolean
   colorPreview?: (hex: string) => string
+  useColorPickerAlign?: ProfilesManagerProps['useColorPickerAlign']
+}
+
+// InlineColorPicker with its placement supplied by a host hook (see ProfilesManagerProps.useColorPickerAlign).
+// A component of its own - rather than a conditional hook call inside EditRow - so the hook is always called
+// unconditionally here, and the plain path below stays byte-identical to what it was. Sized exactly as
+// InlineColorPicker sizes itself (the default swatch list at the raw window width), so the host's placement and
+// the popover it positions agree on its footprint.
+function AlignedColorPicker({ useAlign, ...props }: ComponentProps<typeof InlineColorPicker> & { useAlign: NonNullable<ProfilesManagerProps['useColorPickerAlign']> }) {
+  const { width: windowWidth } = useWindowDimensions()
+  const { width, height } = getInlineColorPickerContentSize(defaultColors.length, windowWidth)
+  const alignOverride = useAlign(props.host.openId === props.id, width, height)
+  return <InlineColorPicker {...props} alignOverride={alignOverride} />
 }
 
 // One row, expanded: the color trigger (@tastic/hud's InlineColorPicker) — doubling as the tag's
@@ -337,7 +363,7 @@ interface EditRowProps {
 // own — submitting the *name* field is what actually commits the row, so its registration's own
 // onSubmitEditing (a no-op — it's last in the chain) is overridden with onSubmit below, matching
 // how a normal multi-field form reads: fill fields in order, the last one finishes it.
-function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag, onTagChange, onSubmit, onDelete, autoFocus, fgMuted, host, dark, colorPreview }: EditRowProps) {
+function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag, onTagChange, onSubmit, onDelete, autoFocus, fgMuted, host, dark, colorPreview, useColorPickerAlign }: EditRowProps) {
   const register = useFocusChain()
   const tag = register()
   const name = register()
@@ -364,7 +390,7 @@ function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag,
 
   return (
     <View style={styles.editRow}>
-      <InlineColorPicker id='color' host={host} value={draftColor} onChange={onColorChange} previewValue={colorPreview} tag={draftTag} dark={dark} />
+      {useColorPickerAlign ? <AlignedColorPicker useAlign={useColorPickerAlign} id='color' host={host} value={draftColor} onChange={onColorChange} previewValue={colorPreview} tag={draftTag} dark={dark} /> : <InlineColorPicker id='color' host={host} value={draftColor} onChange={onColorChange} previewValue={colorPreview} tag={draftTag} dark={dark} />}
       {/* Invisible on purpose (styles.hiddenTagInput: zero footprint, position: 'absolute' so it
       doesn't reserve space in the row's own flex layout) — the swatch above is the only place this
       value is ever meant to be seen. pointerEvents='none' is what actually keeps it out of the

@@ -136,6 +136,28 @@ const placement = useMyRotatedAlign(open, width, height) // returns a ProfilePic
 wide, and `8 * 2 + (profileCount + 1 + (hasManageRow ? 1 : 0)) * 36` tall (the null/"guest" row, one
 row per profile, and the Manage row when `onManage` is passed).
 
+
+#### The Profiles screen's color swatch: `useColorPickerAlign`
+
+`ProfilesManager` (and `ProfilesScreen`, which forwards it) renders `@tastic/hud`'s `InlineColorPicker`
+for the swatch popover in an edit row, and owns the popover state internally — so the host cannot pass
+`alignOverride` to it directly. Inside a fake-rotated frame that popover has the same misplacement (and
+`InlineColorPicker` also feeds `useAutoAlign` its ambient rotation, double-rotating an already-transformed
+rect). Pass a placement **hook** as `useColorPickerAlign`:
+
+```tsx
+<ProfilesScreen useColorPickerAlign={useFrameAutoAlign} /* ...the usual props */ />
+```
+
+It is called as `useColorPickerAlign(open, contentWidth, contentHeight)` — `open` is whether the swatch
+popover is showing, and the size is what `InlineColorPicker` itself computes (`@tastic/hud`'s
+`getInlineColorPickerContentSize` for the default swatch list at the raw window width) — and must return a
+`ProfilePickerAlignResult`, which is handed to `InlineColorPicker` as its `alignOverride` (its `triggerRef`
+is the ref that gets measured). It is a hook, not a plain function: give it a stable identity for the life of
+the mount (a module-level function), since switching it at runtime remounts the swatch. Omit it and behaviour is
+identical to before. **Needs `@tastic/hud` >= 0.12.0** to have any effect — older hud has no `alignOverride`
+on `InlineColorPicker` and ignores it.
+
 ### Routed screens: `ProfilesScreen`
 
 `ProfilesScreen` is the routed-screen shell every app in the fleet was hand-rolling on its own

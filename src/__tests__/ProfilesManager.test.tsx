@@ -1,7 +1,7 @@
-import { useAutoPaperTheme } from '@rific/auto-paper'
+import { defaultColors, useAutoPaperTheme } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
 import { useToast } from '@rific/toaster'
-import { InlineColorPicker } from '@tastic/hud'
+import { getInlineColorPickerContentSize, InlineColorPicker } from '@tastic/hud'
 import { act, render } from '@testing-library/react'
 import { createRef } from 'react'
 import { Button, Icon, Text, TextInput } from 'react-native-paper'
@@ -25,7 +25,9 @@ jest.mock('../ProfileChip', () => ({
 // same as ColorPicker.test.tsx in the sibling React-Native-Auto-Paper package does for its own
 // one-off '../components/Dialog' mock.
 jest.mock('@rific/auto-paper', () => ({
-  useAutoPaperTheme: jest.fn()
+  useAutoPaperTheme: jest.fn(),
+  // Only the LENGTH matters here (the swatch popover is sized from it) - 20, like the real default list.
+  defaultColors: Array.from({ length: 20 }, (_, i) => ({ name: `color-${i}`, value: `#0000${String(i).padStart(2, '0')}` }))
 }))
 
 jest.mock('@rific/feedback-press', () => ({
@@ -43,6 +45,9 @@ jest.mock('@tastic/hud', () => {
   const { useCallback, useState } = require('react') as typeof import('react')
   return {
     InlineColorPicker: jest.fn(() => null),
+    // A deterministic stand-in for hud's pure sizing helper, so a test can predict exactly what the placement hook is
+    // handed: (swatchCount, windowWidth) -> { width, height }.
+    getInlineColorPickerContentSize: jest.fn((swatchCount: number, windowWidth: number) => ({ width: 100 + swatchCount, height: 10 + windowWidth })),
     // A faithful, self-contained reimplementation of the real hook (see @tastic/hud's own
     // usePopoverHost.ts) — not jest.requireActual('@tastic/hud'), which would also eagerly
     // evaluate every other module its index.ts re-exports. Needs to be genuinely stateful (not a
@@ -80,7 +85,8 @@ jest.mock('react-native', () => {
     },
     View: jest.fn(stub),
     ScrollView: jest.fn(stub),
-    KeyboardAvoidingView: jest.fn(stub)
+    KeyboardAvoidingView: jest.fn(stub),
+    useWindowDimensions: jest.fn(() => ({ width: 402, height: 874, scale: 3, fontScale: 1 }))
   }
 })
 
@@ -519,5 +525,61 @@ describe('ProfilesManager', () => {
     act(() => host.toggle('color')) // toggling the same id again closes it
 
     expect(mockFocus).not.toHaveBeenCalled()
+  })
+})
+
+// A host inside a fake-rotated frame supplies the swatch popover's placement through `useColorPickerAlign` (see its doc on
+// ProfilesManagerProps): hud's own placement measures along the wrong axes there.
+describe('ProfilesManager: useColorPickerAlign', () => {
+  const placement = { align: 'left', verticalAlign: 'above', maxHeight: 123, measured: true, triggerRef: { current: null } } as const
+  const lastInlineColorPickerProps = (): any => {
+    const calls = mockInlineColorPicker.mock.calls
+    return calls[calls.length - 1][0]
+  }
+  const mockGetContentSize = getInlineColorPickerContentSize as jest.MockedFunction<typeof getInlineColorPickerContentSize>
+
+  it("hands InlineColorPicker no alignOverride when the prop is omitted (today's behaviour)", () => {
+    renderManager()
+    act(() => findTouchableRippleByText('New Profile').onPress())
+
+    expect(lastInlineColorPickerProps().alignOverride).toBeUndefined()
+    expect(mockGetContentSize).not.toHaveBeenCalled()
+  })
+
+  it("calls the hook with the popover's open state and its content size, and passes the result as InlineColorPicker's alignOverride", () => {
+    const useColorPickerAlign = jest.fn(() => placement)
+    renderManager({ useColorPickerAlign })
+    act(() => findTouchableRippleByText('New Profile').onPress())
+
+    // Sized exactly as InlineColorPicker sizes itself: the default swatch list at the raw window width.
+    expect(mockGetContentSize).toHaveBeenLastCalledWith(defaultColors.length, 402)
+    expect(useColorPickerAlign).toHaveBeenLastCalledWith(false, 100 + defaultColors.length, 10 + 402)
+    expect(lastInlineColorPickerProps().alignOverride).toBe(placement)
+  })
+
+  it('reports the popover as open to the hook once the color popover host opens, and closed again after', () => {
+    const useColorPickerAlign = jest.fn(() => placement)
+    renderManager({ useColorPickerAlign })
+    act(() => findTouchableRippleByText('New Profile').onPress())
+    const host = lastInlineColorPickerHost()
+
+    const lastOpenArg = () => (useColorPickerAlign.mock.calls as unknown[][])[useColorPickerAlign.mock.calls.length - 1][0]
+
+    act(() => host.toggle('color'))
+    expect(lastOpenArg()).toBe(true)
+
+    act(() => host.toggle('color'))
+    expect(lastOpenArg()).toBe(false)
+  })
+
+  it("applies to an existing profile's edit row too, and still passes every other InlineColorPicker prop through", () => {
+    const alice = createProfile({ id: 'a', name: 'Alice', color: '#654321', tag: 'AL' })
+    const colorPreview = jest.fn()
+    renderManager({ profiles: [alice], useColorPickerAlign: () => placement, colorPreview })
+    act(() => findTouchableRippleByText('Alice').onPress())
+
+    const props = lastInlineColorPickerProps()
+    expect(props).toMatchObject({ id: 'color', value: '#654321', tag: 'AL', previewValue: colorPreview })
+    expect(props.alignOverride).toBe(placement)
   })
 })
