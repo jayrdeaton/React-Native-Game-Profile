@@ -7,6 +7,7 @@ import { createRef } from 'react'
 import { Button, Icon, Text, TextInput } from 'react-native-paper'
 
 import { ProfileChip } from '../ProfileChip'
+import { ProfileColorProvider } from '../ProfileColorContext'
 import { ProfilesManager, ProfilesManagerHandle, ProfilesManagerProps } from '../ProfilesManager'
 import { Profile } from '../types'
 
@@ -259,6 +260,29 @@ describe('ProfilesManager', () => {
     expect(mockProfileChip.mock.calls.map(([props]) => (props as any).profile.name)).toEqual(['Alice', 'Bob', 'Charlie'])
     expect((mockProfileChip.mock.calls[0][0] as any).size).toBe(40)
     expect(mockTouchableRipple.mock.calls.map(([props]) => flattenText((props as any).children))).toEqual(['Alice', 'Bob', 'Charlie', 'New Profile'])
+  })
+
+  it('previews swatches through ProfileColorProvider when no colorPreview prop is passed, and lets the prop win', () => {
+    const contextPreview = (hex: string) => `muted(${hex})`
+    const propPreview = (hex: string) => `prop(${hex})`
+    const lastPreviewValue = () => (mockInlineColorPicker.mock.calls[mockInlineColorPicker.mock.calls.length - 1][0] as { previewValue?: unknown }).previewValue
+
+    const { unmount } = render(
+      <ProfileColorProvider preview={contextPreview}>
+        <ProfilesManager profiles={[]} defaultColor={DEFAULT_COLOR} onCreate={jest.fn()} onSave={jest.fn()} onDelete={jest.fn()} />
+      </ProfileColorProvider>
+    )
+    act(() => findTouchableRippleByText('New Profile').onPress())
+    expect(lastPreviewValue()).toBe(contextPreview)
+    unmount()
+
+    render(
+      <ProfileColorProvider preview={contextPreview}>
+        <ProfilesManager profiles={[]} defaultColor={DEFAULT_COLOR} onCreate={jest.fn()} onSave={jest.fn()} onDelete={jest.fn()} colorPreview={propPreview} />
+      </ProfileColorProvider>
+    )
+    act(() => findTouchableRippleByText('New Profile').onPress())
+    expect(lastPreviewValue()).toBe(propPreview)
   })
 
   it('tapping New Profile opens a blank draft with no delete affordance', () => {

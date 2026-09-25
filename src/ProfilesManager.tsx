@@ -9,6 +9,7 @@ import { Button, Icon, Portal, Text, TextInput } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ProfileChip } from './ProfileChip'
+import { useProfileColorPreview } from './ProfileColorContext'
 import { type ProfilePickerAlignResult } from './ProfilePicker'
 import { clampTag, isValidTag, MAX_PROFILE_NAME_LENGTH } from './profilesValidation'
 import { Profile } from './types'
@@ -78,7 +79,7 @@ export interface ProfilesManagerProps {
   titleVariant?: MD3TextVariant
   // Transforms the color swatch grid's own preview per-swatch — forwarded straight to the internal
   // InlineColorPicker's identical prop (see its own doc). Leaves draftColor/onCreate/onSave's actual
-  // color value untouched; only what's rendered changes.
+  // color value untouched; only what's rendered changes. Defaults to ProfileColorProvider's preview.
   colorPreview?: (hex: string) => string
   // Substitutes the color swatch popover's own placement, for a host that renders this screen inside a
   // FAKE-rotated frame (a View turned +-90deg while the OS stays portrait-locked). @tastic/hud's
@@ -114,7 +115,11 @@ function deriveTag(name: string): string {
 // really unmounts it on a given host's router — see ProfilesManagerHandle's own doc for the
 // react-navigation-web case where it doesn't, and why a host there needs the `ref` escape hatch
 // instead of relying on the unmount fallback alone.
-export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDelete, headerLeft, ref, fg: fgOverride, fgMuted: fgMutedOverride, cardBg: cardBgOverride, titleVariant = 'headlineSmall', colorPreview, useColorPickerAlign }: ProfilesManagerProps) {
+export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDelete, headerLeft, ref, fg: fgOverride, fgMuted: fgMutedOverride, cardBg: cardBgOverride, titleVariant = 'headlineSmall', colorPreview: colorPreviewProp, useColorPickerAlign }: ProfilesManagerProps) {
+  // An explicit prop wins; otherwise the app-wide ProfileColorProvider's, so the swatch previews
+  // match the ProfileChips drawn in the list.
+  const contextColorPreview = useProfileColorPreview()
+  const colorPreview = colorPreviewProp ?? contextColorPreview
   const { dark, colors } = useAutoPaperTheme()
   const insets = useSafeAreaInsets()
   const { error: showErrorToast } = useToast()

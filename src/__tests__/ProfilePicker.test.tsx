@@ -7,6 +7,7 @@ import { ScrollView, View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
 
 import { ProfileChip } from '../ProfileChip'
+import { ProfileColorProvider } from '../ProfileColorContext'
 import { getProfilePickerContentSize, ProfilePicker, ProfilePickerAlignResult } from '../ProfilePicker'
 import { Profile } from '../types'
 
@@ -79,6 +80,7 @@ const makeHost = (openId: string | null): MockHost => ({
 
 interface Overrides {
   host?: MockHost
+  preview?: (hex: string) => string
   profiles?: Profile[]
   selectedId?: string | null
   takenId?: string | null
@@ -97,7 +99,7 @@ interface Overrides {
 function renderPicker(overrides: Overrides = {}) {
   const host = overrides.host ?? makeHost(null)
   const onSelect = overrides.onSelect ?? jest.fn()
-  const utils = render(<ProfilePicker idPrefix={ID_PREFIX} host={host} profiles={overrides.profiles ?? PROFILES} selectedId={overrides.selectedId ?? null} takenId={overrides.takenId} color={overrides.color ?? '#123456'} dark={overrides.dark ?? false} align={overrides.align} alignOverride={overrides.alignOverride} rotation={overrides.rotation} guestLabel={overrides.guestLabel ?? 'guest'} nullLabel={overrides.nullLabel} nullIcon={overrides.nullIcon} onSelect={onSelect} onManage={overrides.onManage} />)
+  const utils = render(<ProfilePicker idPrefix={ID_PREFIX} host={host} profiles={overrides.profiles ?? PROFILES} selectedId={overrides.selectedId ?? null} takenId={overrides.takenId} color={overrides.color ?? '#123456'} dark={overrides.dark ?? false} align={overrides.align} alignOverride={overrides.alignOverride} rotation={overrides.rotation} guestLabel={overrides.guestLabel ?? 'guest'} nullLabel={overrides.nullLabel} nullIcon={overrides.nullIcon} onSelect={onSelect} onManage={overrides.onManage} />, overrides.preview ? { wrapper: ({ children }) => <ProfileColorProvider preview={overrides.preview!}>{children}</ProfileColorProvider> } : undefined)
   return { ...utils, host, onSelect }
 }
 
@@ -213,6 +215,12 @@ describe('ProfilePicker', () => {
       expect(chips).toEqual([expect.objectContaining({ profile: AMY, filled: true }), expect.objectContaining({ profile: MIKE, filled: false }), expect.objectContaining({ profile: ZOE, filled: true })])
       // Mike is sorted row index 1, i.e. TouchableRipple call index 3 (trigger + null row + Amy).
       expect(styleOf(mockTouchableRipple.mock.calls[3])).toEqual(expect.arrayContaining([expect.objectContaining({ backgroundColor: MIKE.color })]))
+    })
+
+    it("fills a selected row with ProfileColorProvider's preview of its color", () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), selectedId: MIKE.id, preview: (hex) => `muted(${hex})` })
+      expect(styleOf(mockTouchableRipple.mock.calls[3])).toEqual(expect.arrayContaining([expect.objectContaining({ backgroundColor: `muted(${MIKE.color})` })]))
+      expect(findText('Mike')?.style).toEqual(expect.arrayContaining([expect.objectContaining({ color: `contrast(muted(${MIKE.color}))` })]))
     })
 
     it("colors a selected row's label for contrast against its own color", () => {
