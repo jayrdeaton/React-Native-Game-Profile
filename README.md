@@ -253,6 +253,26 @@ so a host app plugs the reducer(s) into whatever store it already has:
   ghost id. Always local, like the guest/CPU/override colors below — never part of the shared
   App Group roster, since who's selected on *this* device is naturally per-app, per-device state.
 
+## Muted profile colors (`ProfileColorProvider`)
+
+An app that draws profile colors through a transform (Solitaire blends them toward its muted
+card-back palette) wraps its tree once:
+
+```tsx
+import { ProfileColorProvider } from '@tastic/profile'
+
+const preview = useCallback((hex: string) => blendTowardCardBack(hex, dark), [dark])
+<ProfileColorProvider preview={preview}>{children}</ProfileColorProvider>
+```
+
+Every `ProfileChip` then draws `preview(profile.color)` (contrast computed against that),
+`ProfilePicker`'s selected row fills with it, and `ProfilesManager`/`ProfilesScreen` use it for
+their swatch previews unless an explicit `colorPreview` prop is passed. Components from other
+packages that render a `ProfileChip` (e.g. `@tastic/hud`'s `AchievementUnlockList`) pick it up
+for free. Only what's drawn changes: saved colors, `onCreate`/`onSave` values and selection are
+untouched. `useProfileColorPreview()` returns the provider's function (or `undefined`), and
+`useProfileDisplayColor(hex)` resolves one color. Without a provider nothing changes.
+
 ## Per-seat color persistence
 
 A loadout/lobby screen's color for a given seat is never just "the selected profile's saved

@@ -2,6 +2,7 @@ import { getContrastColor } from '@rific/auto-paper'
 import { StyleSheet, View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
 
+import { useProfileDisplayColor } from './ProfileColorContext'
 import { Profile } from './types'
 
 // Presence check, not isValidTag's own full-string emoji validation (profilesValidation.ts) — this
@@ -29,14 +30,16 @@ interface Props {
 // badge for a list row (ProfilePicker's dropdown, ProfilesManager's roster) rather than an
 // interactive picker trigger.
 export function ProfileChip({ profile, size = 22, filled = true }: Props) {
-  const contrastColor = getContrastColor(profile.color)
+  // The drawn color, not necessarily the saved one — see ProfileColorProvider.
+  const color = useProfileDisplayColor(profile.color)
+  const contrastColor = getContrastColor(color)
   // An emoji glyph reads visually smaller than a bold letter at the same fontSize (the system emoji
   // font leaves more of its own em-box empty), so a plain-text ratio that looks right for "J" still
   // looks small for "🎮" at the identical size — this bumps emoji up to the icon's own ratio instead,
   // since a single emoji is closer in visual weight to an icon glyph than to a line of text.
   const tagFontSize = size * (profile.tag && EMOJI_PATTERN.test(profile.tag) ? 0.6 : 0.4)
   return (
-    <View style={[styles.chip, { borderRadius: size / 2, height: size, width: size }, filled && { backgroundColor: profile.color }]}>
+    <View style={[styles.chip, { borderRadius: size / 2, height: size, width: size }, filled && { backgroundColor: color }]}>
       {profile.tag ? (
         <Text style={[styles.tag, { color: contrastColor, fontSize: tagFontSize }]} numberOfLines={1} adjustsFontSizeToFit>
           {profile.tag}

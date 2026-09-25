@@ -11,6 +11,7 @@ jest.mock('@rific/auto-paper', () => ({
 import { getContrastColor } from '@rific/auto-paper'
 
 import { ProfileChip } from '../ProfileChip'
+import { ProfileColorProvider } from '../ProfileColorContext'
 
 const mockView = View as unknown as jest.Mock
 const mockIcon = Icon as jest.MockedFunction<typeof Icon>
@@ -71,6 +72,16 @@ describe('ProfileChip', () => {
     // as a style array entry — the circle keeps its size/shape either way
     expect(style[style.length - 1]).toBe(false)
     expect(style).toContainEqual({ borderRadius: 11, height: 22, width: 22 })
+  })
+
+  it("fills with ProfileColorProvider's preview of the color, and computes contrast against that", () => {
+    render(
+      <ProfileColorProvider preview={(hex) => (hex === '#2196f3' ? '#000000' : hex)}>
+        <ProfileChip profile={{ ...PROFILE, color: '#2196f3', tag: 'J' }} />
+      </ProfileColorProvider>
+    )
+    expect(chipStyle()).toContainEqual({ backgroundColor: '#000000' })
+    expect(mockGetContrastColor).toHaveBeenCalledWith('#000000')
   })
 
   it('sizes the chip circle from the size prop, defaulting to 22', () => {

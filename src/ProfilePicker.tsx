@@ -6,6 +6,7 @@ import { ScrollView, StyleSheet, View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
 
 import { ProfileChip } from './ProfileChip'
+import { useProfileColorPreview } from './ProfileColorContext'
 import { Profile } from './types'
 
 const TRIGGER_HEIGHT = 28
@@ -121,6 +122,8 @@ interface ProfilePickerProps<P extends Profile> {
 // its own persistence hook.
 export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, selectedId, takenId, color, dark, align: forcedAlign, alignOverride, rotation = 0, guestLabel, nullLabel = 'Player', nullIcon = 'account-off-outline', onSelect, onManage }: ProfilePickerProps<P>) {
   const id = `${idPrefix}-profile`
+  // A selected row fills with the profile's drawn color, the same one its ProfileChip would show.
+  const colorPreview = useProfileColorPreview()
   const menuBg = dark ? '#000000' : '#FFFFFF'
   const fg = dark ? '#FFFFFF' : '#000000'
 
@@ -201,8 +204,9 @@ export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, sel
           {sortedProfiles.map((profile) => {
             const taken = profile.id === takenId
             const selected = selectedId === profile.id
+            const rowColor = colorPreview ? colorPreview(profile.color) : profile.color
             return (
-              <TouchableRipple key={profile.id} disabled={taken} onPress={() => handleSelectExisting(profile)} style={[styles.row, selected && { backgroundColor: profile.color }]}>
+              <TouchableRipple key={profile.id} disabled={taken} onPress={() => handleSelectExisting(profile)} style={[styles.row, selected && { backgroundColor: rowColor }]}>
                 <View style={[styles.rowInner, taken && styles.rowDisabled]}>
                   {/* Unfilled on a selected row — its own background already fills with the
                   profile's color, so a second circle behind the tag would just be a redundant badge
@@ -212,7 +216,7 @@ export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, sel
                     style={[
                       styles.rowLabel,
                       {
-                        color: selected ? getContrastColor(profile.color) : fg
+                        color: selected ? getContrastColor(rowColor) : fg
                       }
                     ]}
                     numberOfLines={1}
