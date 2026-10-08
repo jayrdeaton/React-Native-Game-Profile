@@ -62,6 +62,40 @@ describe('createProfileSelectionSlice', () => {
     expect(reducer(initial, actions.clearProfile('missing'))).toEqual(initial)
   })
 
+  describe('pruneToRoster', () => {
+    it('namespaces its action type under profileSelection/<namespace>/', () => {
+      const { actions } = createProfileSelectionSlice<Seat>('loadout', defaultState)
+      expect(actions.pruneToRoster.type).toBe('profileSelection/loadout/pruneToRoster')
+    })
+
+    it('nulls a seat whose profile id is absent from the roster and leaves a present one', () => {
+      const { actions, reducer } = createProfileSelectionSlice<Seat>('loadout', defaultState)
+      const initial: Record<Seat, string | null> = { 1: 'profile-1', 2: 'profile-2' }
+      const state = reducer(initial, actions.pruneToRoster(['profile-2', 'profile-3']))
+      expect(state).toEqual({ 1: null, 2: 'profile-2' })
+    })
+
+    it('leaves null seats null', () => {
+      const { actions, reducer } = createProfileSelectionSlice<Seat>('loadout', defaultState)
+      const initial: Record<Seat, string | null> = { 1: null, 2: 'profile-2' }
+      const state = reducer(initial, actions.pruneToRoster(['profile-1']))
+      expect(state).toEqual({ 1: null, 2: null })
+    })
+
+    it('returns the identical state reference when every selected id is in the roster', () => {
+      const { actions, reducer } = createProfileSelectionSlice<Seat>('loadout', defaultState)
+      const initial: Record<Seat, string | null> = { 1: 'profile-1', 2: null }
+      expect(reducer(initial, actions.pruneToRoster(['profile-1', 'profile-2']))).toBe(initial)
+    })
+
+    it('clears every selected seat when the roster is empty', () => {
+      const { actions, reducer } = createProfileSelectionSlice<Seat>('loadout', defaultState)
+      const initial: Record<Seat, string | null> = { 1: 'profile-1', 2: 'profile-2' }
+      const state = reducer(initial, actions.pruneToRoster([]))
+      expect(state).toEqual({ 1: null, 2: null })
+    })
+  })
+
   describe('REHYDRATE', () => {
     it('backfills a seat missing from a persisted blob that predates it, instead of leaving it undefined', () => {
       const { reducer } = createProfileSelectionSlice<Seat>('loadout', defaultState)

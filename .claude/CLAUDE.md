@@ -15,7 +15,7 @@ npm run build        # tsup, outputs CJS + ESM + types to dist/
 npm run build:watch  # tsup --watch
 npm run lint         # ESLint
 npm run fix          # ESLint --fix
-npm test             # Jest (135 tests)
+npm test             # Jest (200 tests)
 npm run test:watch   # Jest in watch mode
 npm run typecheck    # TypeScript type check (tsc --noEmit)
 npm run verify       # lint + test + typecheck + build, in that order
@@ -45,7 +45,7 @@ src/
     createActionCreator.ts    - internal `{ type, match }` action-creator factory shared by the slices below; not exported from index.ts
     profilesSlice.ts          - profilesActions (add/update/remove/setAll) + profilesReducer over Profile[], plus createProfileRecord(input) to mint a new Profile
     profileExtensionSlice.ts  - createProfileExtensionSlice<TExtension>(namespace) factory: a host app's own per-profile fields (control scheme, key scheme, ...) as a namespaced Record<profileId, TExtension> slice
-    profileSelectionSlice.ts  - createProfileSelectionSlice<TSeat>(namespace, defaultState) factory: which profile each seat last picked (always local, per-device — never the shared roster), generalizing an identical hand-rolled Record<Seat, string | null> reducer 5 @tastic games each carried separately
+    profileSelectionSlice.ts  - createProfileSelectionSlice<TSeat>(namespace, defaultState) factory: select/clearProfile/pruneToRoster actions over which profile each seat last picked (always local, per-device, never the shared roster), generalizing an identical hand-rolled Record<Seat, string | null> reducer 5 @tastic games each carried separately
     seatColorsSlice.ts        - createSeatColorsSlice<TSeat>(namespace, defaultState, mountKey?) factory: a seat's remembered guest color, CPU color, and a manual-recolor override for a profile-selected seat, generalizing an identical hand-rolled slice 4 @tastic games each carried separately (Snake keeps its equivalent fields folded into its own gameSlice.ts instead — a deliberate scope call, not an oversight, see the file's own doc comment)
     resolveInitialProfiles.ts - one-time initial-roster decision: local fallback when the shared store is unavailable/empty, otherwise shared always wins
     useSharedProfilesSync.ts  - keeps a Redux-backed roster in sync with the shared store: syncToShared() mirrors writes out, an AppState listener refreshes on foreground
@@ -109,7 +109,7 @@ From `src/index.ts`:
 
 - Framework: Jest (`@infinitetoken/jest-config/react-native`), jsdom environment
 - Mocks in `src/__mocks__/` for `react-native`, `react-native-paper`
-- 135 tests across 9 suites
+- 200 tests across 12 suites
 - Coverage (measured 2026-09-15): **100 / 94.44 / 98.41 / 100** (statements/branches/functions/lines),
   against the shared preset's 70% floor on all four metrics — no local `coverageThreshold` override.
   Branch gaps are in `ProfilesManager.tsx` (lines 88, 108-115, 208-235); the one function gap is
