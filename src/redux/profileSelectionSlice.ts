@@ -14,6 +14,7 @@ export interface SelectProfilePayload<TSeat> {
 
 export interface ProfileSelectionActions<TSeat> {
   clearProfile: ActionCreator<string>
+  pruneToRoster: ActionCreator<string[]>
   select: ActionCreator<SelectProfilePayload<TSeat>>
 }
 
@@ -50,9 +51,15 @@ export interface ProfileSelectionSlice<TSeat extends string | number> {
 // from inside its own reducer function — only worth overriding if some future consumer ever mounts
 // this under a different key. Note `namespace` above is a different thing: it's the app's own name
 // (e.g. 'airhockey', 'boxhockey'), used only to prefix action types, not the mount key.
+//
+// `pruneToRoster(ids)` nulls every seat whose profile id is no longer in the given roster. Call it
+// after any profilesActions.setAll (initial reconcile, onRemoteChange), since a sibling app can
+// delete a profile without this app's own deleteProfile ever running. It returns the same state
+// object when nothing changes, so dispatching it on every foreground resume costs no re-render.
 export function createProfileSelectionSlice<TSeat extends string | number>(namespace: string, defaultState: ProfileSelectionState<TSeat>, mountKey = 'profileSelection'): ProfileSelectionSlice<TSeat> {
   const select = createActionCreator<SelectProfilePayload<TSeat>>(`profileSelection/${namespace}/select`)
   const clearProfile = createActionCreator<string>(`profileSelection/${namespace}/clearProfile`)
+  const pruneToRoster = createActionCreator<string[]>(`profileSelection/${namespace}/pruneToRoster`)
 
   function reducer(state: ProfileSelectionState<TSeat> = defaultState, action: { type: string; payload?: unknown }): ProfileSelectionState<TSeat> {
     // redux-persist's own default stateReconciler (autoMergeLevel1) HARD-REPLACES this slice's
@@ -74,8 +81,21 @@ export function createProfileSelectionSlice<TSeat extends string | number>(names
       }
       return next
     }
+    if (pruneToRoster.match(action)) {
+      const roster = new Set(action.payload)
+      const next = { ...state }
+      let changed = false
+      for (const seat of Object.keys(state) as TSeat[]) {
+        const profileId = state[seat]
+        if (profileId !== null && !roster.has(profileId)) {
+          next[seat] = null
+          changed = true
+        }
+      }
+      return changed ? next : state
+    }
     return state
   }
 
-  return { actions: { clearProfile, select }, reducer }
+  return { actions: { clearProfile, pruneToRoster, select }, reducer }
 }

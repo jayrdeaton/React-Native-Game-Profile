@@ -244,13 +244,18 @@ so a host app plugs the reducer(s) into whatever store it already has:
 - **`createProfileSelectionSlice<TSeat>(namespace, defaultState)`** — a factory for the *other*
   per-seat piece of state: which profile id each seat currently has selected (parallel to
   `createProfileExtensionSlice` above, but keyed by seat instead of by profile id). Returns a
-  `{ actions: { select, clearProfile }, reducer }` pair over a plain `Record<TSeat, string | null>`.
+  `{ actions: { select, clearProfile, pruneToRoster }, reducer }` pair over a plain
+  `Record<TSeat, string | null>`.
   Unlike `createProfileExtensionSlice`, the seat set can't be derived from `TSeat` alone (types
   don't exist at runtime), so callers pass their own `defaultState` — the same literal object (e.g.
   `{ 1: null, 2: null }`) every app already declares today. `select({ seat, profileId })` sets one
   seat's selection directly; `clearProfile(profileId)` walks every seat and nulls out any that
   currently points at that id — call it when a profile is deleted so no seat is left referencing a
-  ghost id. Always local, like the guest/CPU/override colors below — never part of the shared
+  ghost id. `pruneToRoster(ids)` nulls every seat whose id is no longer in the given roster; dispatch
+  it after both `profilesActions.setAll` paths (the initial `resolveInitialProfiles` reconcile and
+  `onRemoteChange`), since a sibling app can delete a profile without this app's own delete ever
+  running, and it returns the same state object when nothing changes.
+  Always local, like the guest/CPU/override colors below, and never part of the shared
   App Group roster, since who's selected on *this* device is naturally per-app, per-device state.
 
 ## Muted profile colors (`ProfileColorProvider`)
