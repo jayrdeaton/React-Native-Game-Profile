@@ -14,17 +14,17 @@ import { type ProfilePickerAlignResult } from './ProfilePicker'
 import { clampTag, isValidTag, MAX_PROFILE_NAME_LENGTH } from './profilesValidation'
 import { Profile } from './types'
 
-// Shared by the New Profile row's own dashed circle and every profile row's own ProfileChip — one
+// Shared by the New Profile row's own dashed circle and every profile row's own ProfileChip - one
 // size for every circle on this screen, rather than each picking its own.
 const CHIP_SIZE = 40
 
-// react-native-paper's own MD3 Text variant names — mirrored locally rather than importing its
+// react-native-paper's own MD3 Text variant names - mirrored locally rather than importing its
 // internal VariantProp/MD3TypescaleKey (not exported from the package's public entry point), same
 // as @tastic/hud's BaseStatsScreen does for its own identical titleVariant prop.
 type MD3TextVariant = 'displayLarge' | 'displayMedium' | 'displaySmall' | 'headlineLarge' | 'headlineMedium' | 'headlineSmall' | 'titleLarge' | 'titleMedium' | 'titleSmall' | 'labelLarge' | 'labelMedium' | 'labelSmall' | 'bodyLarge' | 'bodyMedium' | 'bodySmall'
 
-// Exported (not just used internally) so a host composing a screen around this component — e.g.
-// @tastic/profile's own ProfilesScreen — can reference this exact shape in its own onCreate/onSave
+// Exported (not just used internally) so a host composing a screen around this component - e.g.
+// @tastic/profile's own ProfilesScreen - can reference this exact shape in its own onCreate/onSave
 // prop types without redeclaring it.
 export interface ProfileEditPatch {
   name: string
@@ -33,36 +33,36 @@ export interface ProfileEditPatch {
 }
 
 export interface ProfilesManagerHandle {
-  // Flushes whatever row is currently being edited — the same thing this component's own unmount
+  // Flushes whatever row is currently being edited - the same thing this component's own unmount
   // effect does, but callable explicitly. Exists because "unmount" isn't a reliable "the user is
   // navigating away" signal on every host: React Navigation's web renderer keeps a popped screen
   // mounted-but-hidden instead of unmounting it, so a host relying only on the unmount fallback
   // silently loses an in-progress edit on `router.back()` there. A host whose router doesn't
   // genuinely unmount this component on navigation should hold a ref and call this right before
   // navigating away (e.g. in its own back-button handler). Safe to call any time, including when
-  // nothing is being edited — a no-op then, same as the unmount effect already is.
+  // nothing is being edited - a no-op then, same as the unmount effect already is.
   commitPendingEdit: () => void
 }
 
 export interface ProfilesManagerProps {
   profiles: Profile[]
-  // The color a brand-new profile's draft starts on — this component doesn't have (and shouldn't
+  // The color a brand-new profile's draft starts on - this component doesn't have (and shouldn't
   // invent) an opinion about the host app's own palette, so this is required rather than defaulted.
   defaultColor: string
   onCreate: (input: ProfileEditPatch) => void
   onSave: (id: string, patch: ProfileEditPatch) => void
-  // Irreversible — this only fires after this component's own confirmation card, not on the first
+  // Irreversible - this only fires after this component's own confirmation card, not on the first
   // tap. If the host app tracks anything else keyed by profile id (stats, history), clear that on
   // its own side when this fires.
   onDelete: (id: string) => void
-  // Rendered inline, before the "Profiles" title, in this component's own header row — a plain
+  // Rendered inline, before the "Profiles" title, in this component's own header row - a plain
   // rendering slot, not an onBack-style callback: this component doesn't know or care that it's a
   // back button, only that the host wants something shown there. Omit to hide the slot.
   headerLeft?: ReactNode
-  // React 19 accepts `ref` as a plain prop on a function component (no forwardRef needed) — see
+  // React 19 accepts `ref` as a plain prop on a function component (no forwardRef needed) - see
   // ProfilesManagerHandle's own doc for why a host may need this.
   ref?: Ref<ProfilesManagerHandle>
-  // Independently optional overrides for this screen's text/card colors — each defaults to the same
+  // Independently optional overrides for this screen's text/card colors - each defaults to the same
   // literal-black/white-by-appearance formula as before when omitted, so every existing caller
   // (none of which pass these) renders identically to before. Same convention as @tastic/hud's
   // BaseStatsScreen fg/cardBg overrides, for a caller with its own app-wide chrome palette instead
@@ -74,10 +74,10 @@ export interface ProfilesManagerProps {
   fgMuted?: string
   cardBg?: string
   // 'headlineSmall' (this screen's own default, below), matching BaseStatsScreen's own settled
-  // default and the reasoning behind it — this title sits next to a small headerLeft back-button
+  // default and the reasoning behind it - this title sits next to a small headerLeft back-button
   // glyph the same way, and the previous hardcoded 'displaySmall' read as oversized there too.
   titleVariant?: MD3TextVariant
-  // Transforms the color swatch grid's own preview per-swatch — forwarded straight to the internal
+  // Transforms the color swatch grid's own preview per-swatch - forwarded straight to the internal
   // InlineColorPicker's identical prop (see its own doc). Leaves draftColor/onCreate/onSave's actual
   // color value untouched; only what's rendered changes. Defaults to ProfileColorProvider's preview.
   colorPreview?: (hex: string) => string
@@ -97,7 +97,7 @@ export interface ProfilesManagerProps {
 
 type Row = { kind: 'profile'; profile: Profile } | { kind: 'new' }
 
-// First letter of the name, uppercased — the tag's own default for as long as it hasn't been typed
+// First letter of the name, uppercased - the tag's own default for as long as it hasn't been typed
 // into directly (see the tagManuallySet state below). Empty name -> empty tag, same as typing
 // nothing into the tag field yourself would leave it.
 function deriveTag(name: string): string {
@@ -105,14 +105,14 @@ function deriveTag(name: string): string {
   return trimmed ? trimmed[0].toUpperCase() : ''
 }
 
-// The profile roster itself — create/rename/recolor/retag/delete, editing inline right in the row
-// you tapped — with no navigation of its own: just data in (`profiles`) and callbacks out, plus
+// The profile roster itself - create/rename/recolor/retag/delete, editing inline right in the row
+// you tapped - with no navigation of its own: just data in (`profiles`) and callbacks out, plus
 // this file's own internal edit-draft state. Deliberately router-agnostic (an `onBack`-style prop
 // would still assume *some* host owns navigation; this component doesn't even go that far), so any
 // consuming screen just renders it as its body inside its own routed wrapper (back button, native
 // push/pop transition, whatever persistence hook backs `profiles`/`onCreate`/`onSave`/`onDelete`).
 // Staying router-agnostic means this component can't know for itself whether "navigating away"
-// really unmounts it on a given host's router — see ProfilesManagerHandle's own doc for the
+// really unmounts it on a given host's router - see ProfilesManagerHandle's own doc for the
 // react-navigation-web case where it doesn't, and why a host there needs the `ref` escape hatch
 // instead of relying on the unmount fallback alone.
 export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDelete, headerLeft, ref, fg: fgOverride, fgMuted: fgMutedOverride, cardBg: cardBgOverride, titleVariant = 'headlineSmall', colorPreview: colorPreviewProp, useColorPickerAlign }: ProfilesManagerProps) {
@@ -130,35 +130,35 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
   const fgMuted = fgMutedOverride ?? (dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)')
   const cardBg = cardBgOverride ?? (dark ? '#111111' : '#F2F2F2')
   const cardBorder = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'
-  // A contained neutral, not an outlined one — reads as "the other button" next to Delete's solid
+  // A contained neutral, not an outlined one - reads as "the other button" next to Delete's solid
   // danger fill, rather than looking unfinished/secondary beside it.
   const cancelBg = dark ? '#2A2A2A' : '#E0E0E0'
   const cancelFg = dark ? '#FFFFFF' : '#000000'
 
-  // 'new' clears back to null once a commit resolves — there's only ever one row open at a time.
+  // 'new' clears back to null once a commit resolves - there's only ever one row open at a time.
   const [editingId, setEditingId] = useState<string | 'new' | null>(null)
   const [draftName, setDraftName] = useState('')
   const [draftColor, setDraftColor] = useState(defaultColor)
   const [draftTag, setDraftTag] = useState('')
-  // Whether the tag has been typed into directly this session — once true, editing the name stops
+  // Whether the tag has been typed into directly this session - once true, editing the name stops
   // overwriting it (see deriveTag's own doc). Starts true for an existing profile that already has
-  // a tag (don't clobber a deliberate choice just because the name changed), false otherwise — a
+  // a tag (don't clobber a deliberate choice just because the name changed), false otherwise - a
   // brand new profile, or one that's never had a tag set at all.
   const [tagManuallySet, setTagManuallySet] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
-  // Commits whichever row is currently open, using its own latest draft state, then closes it —
+  // Commits whichever row is currently open, using its own latest draft state, then closes it -
   // always closes, even when there's nothing valid to save (an empty name just discards the draft
   // rather than leaving the row stuck open). This is the only way a row ever closes: submitting the
-  // name field (see EditRow's own focus-chain wiring — tag submits to name, name submits this),
+  // name field (see EditRow's own focus-chain wiring - tag submits to name, name submits this),
   // switching to a different row (see startEdit, which calls this before opening a new one), or
-  // leaving the screen entirely (see the unmount effect below) — no explicit save/cancel buttons,
+  // leaving the screen entirely (see the unmount effect below) - no explicit save/cancel buttons,
   // just scoped to the whole row instead of one field, since there's more than one field to touch.
   const commitEdit = useCallback(() => {
     const name = draftName.trim()
     if (editingId && name) {
       const tagValid = isValidTag(draftTag)
-      // Surfaced here, not just the field's own live `error` outline — that outline disappears the
+      // Surfaced here, not just the field's own live `error` outline - that outline disappears the
       // moment this row closes, so without this a still-invalid tag would just silently vanish
       // (saved as empty) with no explanation of why it didn't stick.
       if (draftTag && !tagValid) showErrorToast('Invalid tag', 'Use up to 3 letters or a single emoji')
@@ -169,11 +169,11 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
     setEditingId(null)
   }, [editingId, draftName, draftColor, draftTag, onCreate, onSave, showErrorToast])
 
-  // Flushes whatever's currently being edited if this whole screen goes away mid-edit — a hardware
+  // Flushes whatever's currently being edited if this whole screen goes away mid-edit - a hardware
   // back gesture or swipe-back can bypass a host screen's own back button (which should already
   // call commitEdit before navigating away) but still unmounts this component the same as any other
   // exit does. Reads the always-current commitEdit through a ref rather than depending on it
-  // directly in the effect — one that re-ran (and re-cleaned-up) on every keystroke would commit on
+  // directly in the effect - one that re-ran (and re-cleaned-up) on every keystroke would commit on
   // every keystroke too, not just on a genuine unmount.
   const commitEditRef = useRef(commitEdit)
   useEffect(() => {
@@ -181,7 +181,7 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
   })
   useEffect(() => () => commitEditRef.current(), [])
   // The explicit escape hatch for hosts whose "navigate away" doesn't genuinely unmount this
-  // component — see ProfilesManagerHandle's own doc. `[]` deps: the handle object itself never
+  // component - see ProfilesManagerHandle's own doc. `[]` deps: the handle object itself never
   // needs to change identity, since it always calls through the ref to whatever commitEdit is
   // current at call time, the same indirection the unmount effect above already relies on.
   useImperativeHandle(ref, () => ({ commitPendingEdit: () => commitEditRef.current() }), [])
@@ -213,8 +213,8 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
     [tagManuallySet]
   )
 
-  // The functional setDraftTag form — reading `previous` from React's own latest-applied state
-  // rather than closing over the `draftTag` variable — matters here, not just style: fast/rapid
+  // The functional setDraftTag form - reading `previous` from React's own latest-applied state
+  // rather than closing over the `draftTag` variable - matters here, not just style: fast/rapid
   // keystrokes can fire their onChangeText calls before a re-render lands, batched into the same
   // update, and clamping every one of them against the same stale `draftTag` (captured once at
   // render time) would let the later ones silently clobber what the earlier ones already clamped
@@ -233,7 +233,7 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
     setConfirmDeleteId(null)
   }, [confirmDeleteId, editingId, onDelete])
 
-  // Alphabetical — this list has no other natural order (creation order isn't meaningful to look
+  // Alphabetical - this list has no other natural order (creation order isn't meaningful to look
   // something up by), and it's the one that actually stays usable once there are more than a
   // handful of profiles on one shared device.
   const sortedProfiles = useMemo(() => [...profiles].sort((a, b) => a.name.localeCompare(b.name)), [profiles])
@@ -279,7 +279,7 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
               return <EditRow key={profile.id} draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} onDelete={() => setConfirmDeleteId(profile.id)} fgMuted={fgMuted} host={host} dark={dark} colorPreview={colorPreview} useColorPickerAlign={useColorPickerAlign} />
             }
 
-            // No delete affordance at rest — tap the row to start editing, which is the one place
+            // No delete affordance at rest - tap the row to start editing, which is the one place
             // delete shows (see EditRow): a deliberate extra step before a destructive action is
             // even reachable, not just before it's confirmed.
             return (
@@ -307,13 +307,13 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
               <Text variant='bodyLarge' style={[styles.overlayBody, { color: fg }]}>
                 This permanently deletes {confirmDeleteProfile.name}&rsquo;s profile. This cannot be undone.
               </Text>
-              {/* Contained neutral, not buttonColor={colors.primary} — colors.primary is often a
+              {/* Contained neutral, not buttonColor={colors.primary} - colors.primary is often a
               live gameplay/seat color in host apps, so a contained Cancel in that color would just
               be whatever's currently painted there, with no relation to "safe to tap". */}
               <Button mode='contained' onPress={() => setConfirmDeleteId(null)} style={styles.overlayButton} buttonColor={cancelBg} textColor={cancelFg}>
                 Cancel
               </Button>
-              {/* colors.danger/onDanger — auto-paper's actual semantic role for this, not a seat's
+              {/* colors.danger/onDanger - auto-paper's actual semantic role for this, not a seat's
               own live color by luck of the default palette. */}
               <Button mode='contained' onPress={handleConfirmDelete} style={styles.overlayButton} buttonColor={colors.danger} textColor={colors.onDanger}>
                 Delete
@@ -334,7 +334,7 @@ interface EditRowProps {
   draftTag: string
   onTagChange: (tag: string) => void
   onSubmit: () => void
-  // Omitted for the 'new' row — nothing saved yet to delete.
+  // Omitted for the 'new' row - nothing saved yet to delete.
   onDelete?: () => void
   autoFocus?: boolean
   fgMuted: string
@@ -356,29 +356,29 @@ function AlignedColorPicker({ useAlign, ...props }: ComponentProps<typeof Inline
   return <InlineColorPicker {...props} alignOverride={alignOverride} />
 }
 
-// One row, expanded: the color trigger (@tastic/hud's InlineColorPicker) — doubling as the tag's
-// own display via its `tag` prop below, since there's no separate visible tag field anymore — an
+// One row, expanded: the color trigger (@tastic/hud's InlineColorPicker) - doubling as the tag's
+// own display via its `tag` prop below, since there's no separate visible tag field anymore - an
 // invisible TextInput that exists purely to actually capture what's typed (RN has no way to bring
 // up a keyboard without a real focusable input; this one is just never meant to be *seen*), the
-// name taking up the row's remaining space, and — only for an existing profile — a delete icon at
+// name taking up the row's remaining space, and - only for an existing profile - a delete icon at
 // the very end. The two effects below are what wires tapping the swatch to popping the keyboard on
 // the hidden tag field too, so typing a tag and picking a color read as one combined action instead
 // of two separate taps, with the swatch itself as the only place the tag ever visibly shows.
 // Return-key chains tag -> name via @rific/focus-chain rather than each field submitting on its
-// own — submitting the *name* field is what actually commits the row, so its registration's own
-// onSubmitEditing (a no-op — it's last in the chain) is overridden with onSubmit below, matching
+// own - submitting the *name* field is what actually commits the row, so its registration's own
+// onSubmitEditing (a no-op - it's last in the chain) is overridden with onSubmit below, matching
 // how a normal multi-field form reads: fill fields in order, the last one finishes it.
 function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag, onTagChange, onSubmit, onDelete, autoFocus, fgMuted, host, dark, colorPreview, useColorPickerAlign }: EditRowProps) {
   const register = useFocusChain()
   const tag = register()
   const name = register()
 
-  // tag.props.focus (from @rific/focus-chain's own register(), not tag.ref — that's a callback
+  // tag.props.focus (from @rific/focus-chain's own register(), not tag.ref - that's a callback
   // ref, not a ref object, so it has no .current to read) is the hook's own imperative "focus this
   // exact registered field" call. Mirrored into a ref every render, same as commitEditRef above,
   // rather than read directly in the effect below: register() returns a brand-new props object on
   // every render (it isn't memoized), so depending on tag.props.focus directly would rerun that
-  // effect — and refocus an already-focused field — on every keystroke into the tag field itself,
+  // effect - and refocus an already-focused field - on every keystroke into the tag field itself,
   // re-triggering its own selectTextOnFocus mid-type and wiping out what's being typed.
   const tagFocusRef = useRef(tag.props.focus)
   useEffect(() => {
@@ -397,9 +397,9 @@ function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag,
     <View style={styles.editRow}>
       {useColorPickerAlign ? <AlignedColorPicker useAlign={useColorPickerAlign} id='color' host={host} value={draftColor} onChange={onColorChange} previewValue={colorPreview} tag={draftTag} dark={dark} /> : <InlineColorPicker id='color' host={host} value={draftColor} onChange={onColorChange} previewValue={colorPreview} tag={draftTag} dark={dark} />}
       {/* Invisible on purpose (styles.hiddenTagInput: zero footprint, position: 'absolute' so it
-      doesn't reserve space in the row's own flex layout) — the swatch above is the only place this
+      doesn't reserve space in the row's own flex layout) - the swatch above is the only place this
       value is ever meant to be seen. pointerEvents='none' is what actually keeps it out of the
-      way: without it, this field — even at 1x1 and fully transparent — still sits in front of the
+      way: without it, this field - even at 1x1 and fully transparent - still sits in front of the
       swatch for hit-testing purposes and swallows the tap meant to open the color popover, since
       focusing this field is never done by tapping it directly anyway (see the effect above, which
       focuses it programmatically). accessibilityLabel stands in for the placeholder a visible field
@@ -439,7 +439,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingBottom: 8
   },
-  // 1x1 and fully transparent — there's nothing to see here on purpose (see EditRow's own comment
+  // 1x1 and fully transparent - there's nothing to see here on purpose (see EditRow's own comment
   // above the field this styles). position: 'absolute' pulls it out of editRow's flex flow
   // entirely, so it doesn't reserve a gap in the row the way a normal flex sibling would.
   hiddenTagInput: {

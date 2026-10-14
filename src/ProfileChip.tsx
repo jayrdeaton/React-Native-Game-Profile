@@ -5,7 +5,7 @@ import { Icon, Text } from 'react-native-paper'
 import { useProfileDisplayColor } from './ProfileColorContext'
 import { Profile } from './types'
 
-// Presence check, not isValidTag's own full-string emoji validation (profilesValidation.ts) — this
+// Presence check, not isValidTag's own full-string emoji validation (profilesValidation.ts) - this
 // only decides a font-size ratio, so it doesn't need that check's ZWJ/variation-selector precision,
 // just "does this tag contain a pictograph at all."
 const EMOJI_PATTERN = /\p{Extended_Pictographic}/u
@@ -14,7 +14,7 @@ interface Props {
   profile: Profile
   size?: number
   // False on a selected row, whose own background already fills with the profile's color (see
-  // ProfilePicker's own selected-row handling) — a second circle behind the tag there would either
+  // ProfilePicker's own selected-row handling) - a second circle behind the tag there would either
   // double up decoratively or, filled some other flat color, look like a stray badge next to the
   // plain icon+text every other selected row in the app uses. Contrast is still computed against
   // the profile's own color either way (that's what's actually behind the glyph whether this chip
@@ -24,18 +24,18 @@ interface Props {
   filled?: boolean
 }
 
-// A profile's identity at a glance — its own color as a filled circle, with its tag (or a generic
+// A profile's identity at a glance - its own color as a filled circle, with its tag (or a generic
 // fallback icon, for a profile with none set) in a contrast-safe color on top. The same combination
 // @tastic/hud's InlineColorPicker trigger shows for live color selection, just as a small static
 // badge for a list row (ProfilePicker's dropdown, ProfilesManager's roster) rather than an
 // interactive picker trigger.
 export function ProfileChip({ profile, size = 22, filled = true }: Props) {
-  // The drawn color, not necessarily the saved one — see ProfileColorProvider.
+  // The drawn color, not necessarily the saved one - see ProfileColorProvider.
   const color = useProfileDisplayColor(profile.color)
   const contrastColor = getContrastColor(color)
   // An emoji glyph reads visually smaller than a bold letter at the same fontSize (the system emoji
   // font leaves more of its own em-box empty), so a plain-text ratio that looks right for "J" still
-  // looks small for "🎮" at the identical size — this bumps emoji up to the icon's own ratio instead,
+  // looks small for "🎮" at the identical size - this bumps emoji up to the icon's own ratio instead,
   // since a single emoji is closer in visual weight to an icon glyph than to a line of text.
   const tagFontSize = size * (profile.tag && EMOJI_PATTERN.test(profile.tag) ? 0.6 : 0.4)
   return (

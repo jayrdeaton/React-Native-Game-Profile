@@ -57,13 +57,13 @@ describe('isValidProfile', () => {
     expect(isValidProfile({ ...VALID_PROFILE, updatedAt: '1000' })).toBe(false)
   })
 
-  it('ignores app-specific extra fields — structural typing lets a richer Profile through', () => {
+  it('ignores app-specific extra fields - structural typing lets a richer Profile through', () => {
     expect(isValidProfile({ ...VALID_PROFILE, keyScheme: 'wasd' })).toBe(true)
   })
 })
 
 describe('isValidTag', () => {
-  it('accepts an empty tag — no tag set yet', () => {
+  it('accepts an empty tag - no tag set yet', () => {
     expect(isValidTag('')).toBe(true)
   })
 

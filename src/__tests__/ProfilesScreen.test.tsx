@@ -6,7 +6,7 @@ import { ProfilesManager } from '../ProfilesManager'
 import { ProfilesScreen, ProfilesScreenProps } from '../ProfilesScreen'
 import { Profile } from '../types'
 
-// ProfilesManager has its own dedicated test suite (ProfilesManager.test.tsx) — this file only
+// ProfilesManager has its own dedicated test suite (ProfilesManager.test.tsx) - this file only
 // needs to assert ProfilesScreen's own wiring around it (which props pass straight through
 // unchanged, and the container/back-button/commit-before-navigate composition it adds on top), not
 // re-verify ProfilesManager's own rendering. Mocked down to a jest.fn() the same way
@@ -146,7 +146,7 @@ describe('ProfilesScreen', () => {
     const props = lastManagerProps()
 
     // Simulates ProfilesManager's own useImperativeHandle attaching its handle to the ref
-    // ProfilesScreen owns and passes down — see ProfilesManager.tsx's own ref wiring.
+    // ProfilesScreen owns and passes down - see ProfilesManager.tsx's own ref wiring.
     props.ref.current = { commitPendingEdit }
 
     props.headerLeft.props.onPress()

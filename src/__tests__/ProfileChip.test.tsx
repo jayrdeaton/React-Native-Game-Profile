@@ -69,7 +69,7 @@ describe('ProfileChip', () => {
     const style = chipStyle()
     expect(style).not.toContainEqual({ backgroundColor: '#2196f3' })
     // the `filled && {...}` expression short-circuits to `false`, which React silently ignores
-    // as a style array entry — the circle keeps its size/shape either way
+    // as a style array entry - the circle keeps its size/shape either way
     expect(style[style.length - 1]).toBe(false)
     expect(style).toContainEqual({ borderRadius: 11, height: 22, width: 22 })
   })

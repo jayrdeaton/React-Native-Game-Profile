@@ -62,7 +62,7 @@ describe('createSeatColorsSlice', () => {
     it('backfills a field missing from a persisted blob that predates it, instead of leaving it undefined', () => {
       const { reducer } = createSeatColorsSlice<Seat>('loadout', defaultState)
       // Simulates redux-persist's own default stateReconciler (autoMergeLevel1) hard-replacing this
-      // slice's state with a persisted blob from before `profileOverride` existed — no such key at
+      // slice's state with a persisted blob from before `profileOverride` existed - no such key at
       // all, not even `undefined` explicitly, the same shape a real old AsyncStorage blob has.
       const staleState = { lastCpuColor: '#123456', lastGuestColor: { 1: '#111111', 2: '#222222' } } as SeatColorsState<Seat>
       const action = { type: 'persist/REHYDRATE', payload: { seatColors: staleState } }

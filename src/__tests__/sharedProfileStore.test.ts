@@ -20,7 +20,7 @@ const OTHER_VALID_PROFILE: Profile = {
 
 const GROUP_ID = 'group.tastic.profile'
 
-describe('sharedProfileStore — native module unavailable', () => {
+describe('sharedProfileStore - native module unavailable', () => {
   beforeEach(() => {
     jest.resetModules()
     jest.doMock('expo-modules-core', () => ({
@@ -48,7 +48,7 @@ describe('sharedProfileStore — native module unavailable', () => {
   })
 })
 
-describe('sharedProfileStore — requireOptionalNativeModule throws at load time', () => {
+describe('sharedProfileStore - requireOptionalNativeModule throws at load time', () => {
   beforeEach(() => {
     jest.resetModules()
     jest.doMock('expo-modules-core', () => ({
@@ -69,7 +69,7 @@ describe('sharedProfileStore — requireOptionalNativeModule throws at load time
   })
 })
 
-describe('sharedProfileStore — native module available', () => {
+describe('sharedProfileStore - native module available', () => {
   const getSharedJSON = jest.fn()
   const setSharedJSON = jest.fn()
 

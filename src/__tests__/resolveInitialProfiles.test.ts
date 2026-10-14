@@ -4,7 +4,7 @@ const ALICE: Profile = { color: '#2196f3', createdAt: 1000, id: 'profile-1', nam
 const BOB: Profile = { color: '#ff0000', createdAt: 2000, id: 'profile-2', name: 'Bob', tag: 'BOB', updatedAt: 2000 }
 const GROUP_ID = 'group.tastic.profile'
 
-describe('resolveInitialProfiles — shared store unavailable', () => {
+describe('resolveInitialProfiles - shared store unavailable', () => {
   beforeEach(() => {
     jest.resetModules()
     jest.doMock('../sharedProfileStore', () => ({
@@ -26,7 +26,7 @@ describe('resolveInitialProfiles — shared store unavailable', () => {
   })
 })
 
-describe('resolveInitialProfiles — shared store available', () => {
+describe('resolveInitialProfiles - shared store available', () => {
   afterEach(() => {
     jest.dontMock('../sharedProfileStore')
     jest.resetModules()

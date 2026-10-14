@@ -17,7 +17,7 @@ const LIST_PADDING = 8
 // A complete placement decision for the popover: which way it opens, how tall it may grow, whether
 // this open's measurement has landed yet, and the ref attached to the measured trigger.
 // Structurally identical to @tastic/hud's own `AlignResult` (exported from hud >= 0.12.0, and the
-// same shape `useAutoAlign` itself returns) — declared here rather than imported so this package's
+// same shape `useAutoAlign` itself returns) - declared here rather than imported so this package's
 // public types don't start requiring a newer @tastic/hud than its peer range already admits. A
 // hud `AlignResult` (e.g. from `useZoneClampedAlign`) is assignable to this as-is.
 export interface ProfilePickerAlignResult {
@@ -36,9 +36,9 @@ export interface ProfilePickerContentSize {
 // The popover's content footprint for a given roster size: always POPOVER_WIDTH wide, tall enough
 // for the null/"guest" row + one row per profile + (when `hasManageRow`, i.e. when the picker is
 // given an `onManage`) the trailing Manage row, plus the list's own padding. This is the size
-// ProfilePicker hands to `useAutoAlign` — the ONE formula, used by the component itself (it leaves
+// ProfilePicker hands to `useAutoAlign` - the ONE formula, used by the component itself (it leaves
 // out the menu's 2pt border and the Manage divider, ~13pt in all, so treat it as a placement
-// estimate, not a pixel-exact measurement) — exported
+// estimate, not a pixel-exact measurement) - exported
 // so a host supplying its own placement through `alignOverride` can size that placement hook (its
 // own useAutoAlign/useZoneClampedAlign call) to match the popover it is actually positioning,
 // instead of copying these constants and drifting whenever they change here.
@@ -48,32 +48,32 @@ export function getProfilePickerContentSize(profileCount: number, hasManageRow =
 }
 
 interface ProfilePickerProps<P extends Profile> {
-  // Namespaces this trigger's id — pass something unique per instance whenever more than one of
+  // Namespaces this trigger's id - pass something unique per instance whenever more than one of
   // these shares a PopoverHost (e.g. one per seat).
   idPrefix: string
-  // The host this trigger's popover opens against — share one host across sibling pickers (a
+  // The host this trigger's popover opens against - share one host across sibling pickers (a
   // seat's color/tag/profile triggers) so opening one closes any other in the same group.
   host: PopoverHost
   profiles: P[]
   selectedId: string | null
-  // Another picker's currently-selected profile id, if any — disabled in this list. Useful when a
+  // Another picker's currently-selected profile id, if any - disabled in this list. Useful when a
   // profile shouldn't be selectable in two places at once (e.g. two seats in a local-multiplayer
   // game, where double-selecting one profile would double-count its stats as both winner and
-  // loser) — omit if that doesn't apply.
+  // loser) - omit if that doesn't apply.
   takenId?: string | null
-  // Tint for the trigger's own label/icon — pass the seat/context's current live color so the
+  // Tint for the trigger's own label/icon - pass the seat/context's current live color so the
   // trigger reads as one identity with whatever it's paired with.
   color: string
   dark: boolean
   // Forces a specific horizontal alignment, beating whatever the placement (the automatic
   // measurement, or `alignOverride` below) would have picked. Omit to let placement decide.
   align?: 'left' | 'right' | 'center'
-  // Substitutes the popover's whole placement — horizontal/vertical alignment, max height, the
-  // `measured` gate and the trigger ref — for the automatic `useAutoAlign` one, for a host whose
+  // Substitutes the popover's whole placement - horizontal/vertical alignment, max height, the
+  // `measured` gate and the trigger ref - for the automatic `useAutoAlign` one, for a host whose
   // trigger sits somewhere that hook's plain window-relative measurement gets wrong. The motivating
   // case is a FAKE-rotated frame (a View turned +-90deg while the OS stays portrait-locked):
   // `measureInWindow` reports a rect in true screen space, `useAutoAlign` compares it against the
-  // raw portrait window, and so measures along the wrong axes — flipping the list upward off-screen
+  // raw portrait window, and so measures along the wrong axes - flipping the list upward off-screen
   // or running it past the frame's bottom. The host runs its own rotation-aware placement hook
   // (sized with `getProfilePickerContentSize`, passing `open` from its own `host.openId === ...`
   // check) and hands the result in here; `align` above still wins over this result's own `align`.
@@ -81,7 +81,7 @@ interface ProfilePickerProps<P extends Profile> {
   // produced it is measuring the right element. Omit for the default automatic placement.
   alignOverride?: ProfilePickerAlignResult
   // Rotation of an ancestor frame turned by a fake landscape (or equivalent), forwarded to the
-  // automatic `useAutoAlign` measurement — the same seam @tastic/hud's InlineColorPicker/
+  // automatic `useAutoAlign` measurement - the same seam @tastic/hud's InlineColorPicker/
   // SectionedDropdown expose (needs @tastic/hud >= 0.8.0; older versions ignore it). Defaults to 0
   // (measurement used as-is), which is exactly how this picker behaved before this prop existed.
   // Deliberately NOT read from an ambient provider the way hud's own pickers do: this component
@@ -89,35 +89,35 @@ interface ProfilePickerProps<P extends Profile> {
   // every existing caller already living under a rotation provider. Ignored when `alignOverride` is
   // supplied (the override replaces the placement this feeds).
   rotation?: PopoverRotation
-  // Trigger's own idle-state text (uppercased here regardless of casing passed in) — shown until a
+  // Trigger's own idle-state text (uppercased here regardless of casing passed in) - shown until a
   // profile is selected.
   guestLabel: string
-  // The null-selection row's own label/icon — defaults to a generic anonymous-player row, but
+  // The null-selection row's own label/icon - defaults to a generic anonymous-player row, but
   // overridable for a caller where null means something else (e.g. an "All Profiles" combined view
   // reusing this same component for its own picker).
   nullLabel?: string
   nullIcon?: string
   onSelect: (profile: P | null) => void
-  // Renders a row for navigating to a dedicated create/rename/delete screen — omit to hide it
+  // Renders a row for navigating to a dedicated create/rename/delete screen - omit to hide it
   // entirely. This component never manages profiles itself (see ProfilesManager for that); this is
   // selection-only.
   onManage?: () => void
 }
 
 // Generic over P (an app's own Profile type, richer than this package's base Profile) so that a
-// caller's own onSelect — typed to accept its own richer profile shape — type-checks against the
+// caller's own onSelect - typed to accept its own richer profile shape - type-checks against the
 // objects this component actually hands back, which are always exactly whatever came in through
 // `profiles` (see handleSelectExisting below). Without this, TypeScript would only ever let
 // onSelect declare the base Profile type, since that's all a non-generic prop signature could
-// promise it receives — even though at runtime it always receives the caller's own richer objects.
+// promise it receives - even though at runtime it always receives the caller's own richer objects.
 // ProfileChip doesn't need this same treatment: it only ever takes a profile in, never hands one
 // back out, so plain structural covariance already lets a richer object through.
 //
 // A name trigger + selection popover: pick an existing profile, fall back to a null/"guest"
 // selection, or (if onManage is passed) navigate to manage the roster. Creating, renaming, and
-// deleting profiles all live outside this component (see ProfilesManager) — this is selection-only,
+// deleting profiles all live outside this component (see ProfilesManager) - this is selection-only,
 // both because that keeps this component simple enough to drop into a HUD trigger row, and because
-// it keeps this popover from needing its own destructive-delete confirmation. Fully prop-driven —
+// it keeps this popover from needing its own destructive-delete confirmation. Fully prop-driven -
 // no internal profile-storage access of its own, so the host app stays the one place that reads
 // its own persistence hook.
 export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, selectedId, takenId, color, dark, align: forcedAlign, alignOverride, rotation = 0, guestLabel, nullLabel = 'Player', nullIcon = 'account-off-outline', onSelect, onManage }: ProfilePickerProps<P>) {
@@ -129,12 +129,12 @@ export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, sel
 
   const open = host.openId === id
   const selectedProfile = profiles.find((p) => p.id === selectedId) ?? null
-  // Alphabetical — this is the list that sees the most real use, so it's the one that benefits
+  // Alphabetical - this is the list that sees the most real use, so it's the one that benefits
   // most from staying scannable once there are more than a handful of saved profiles.
   const sortedProfiles = useMemo(() => [...profiles].sort((a, b) => a.name.localeCompare(b.name)), [profiles])
   // Null row + each saved profile + (if passed) the manage row.
   const { width: contentWidth, height: contentHeight } = getProfilePickerContentSize(profiles.length, !!onManage)
-  // Always called, even when `alignOverride` is supplied and this result goes unused — hooks can't
+  // Always called, even when `alignOverride` is supplied and this result goes unused - hooks can't
   // be conditional (see @tastic/hud's InlineColorPicker for the identical pattern). With an
   // override its triggerRef is never attached, so this hook's own measurement is a no-op.
   const auto = useAutoAlign(open, contentWidth, contentHeight, rotation)
@@ -169,7 +169,7 @@ export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, sel
         </View>
       </TouchableRipple>
 
-      {/* Gated on `measured`, not just `open` — see InlineColorPicker's identical fix. */}
+      {/* Gated on `measured`, not just `open` - see InlineColorPicker's identical fix. */}
       <PopoverBody visible={open && measured} align={align} verticalAlign={verticalAlign} caretColor={menuBg} caretBorderColor={color} caretBorderWidth={2} triggerSize={TRIGGER_HEIGHT}>
         <ScrollView
           style={[
@@ -185,12 +185,12 @@ export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, sel
           showsVerticalScrollIndicator={false}
         >
           {/* Selected row's own background fills entirely with its identity color (this seat's own
-          accent for the null row, the profile's own saved color otherwise) — matching how a
+          accent for the null row, the profile's own saved color otherwise) - matching how a
           selected row reads elsewhere (see @tastic/hud's SectionedDropdown) rather than a checkmark
           bolted onto an otherwise-plain row. */}
           <TouchableRipple onPress={handleSelectGuest} style={[styles.row, selectedId === null && { backgroundColor: color }]}>
             <View style={styles.rowInner}>
-              {/* Unfilled, matching a selected profile row's own ProfileChip treatment — no
+              {/* Unfilled, matching a selected profile row's own ProfileChip treatment - no
               background circle, but still the same fixed-size slot every row's icon/chip sits in
               (see ProfileChip's own doc), so this row's icon stays lined up with every other row
               regardless of selection. */}
@@ -208,7 +208,7 @@ export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, sel
             return (
               <TouchableRipple key={profile.id} disabled={taken} onPress={() => handleSelectExisting(profile)} style={[styles.row, selected && { backgroundColor: rowColor }]}>
                 <View style={[styles.rowInner, taken && styles.rowDisabled]}>
-                  {/* Unfilled on a selected row — its own background already fills with the
+                  {/* Unfilled on a selected row - its own background already fills with the
                   profile's color, so a second circle behind the tag would just be a redundant badge
                   where every other selected row in the app has plain icon+text instead. */}
                   <ProfileChip profile={profile} filled={!selected} />
@@ -231,7 +231,7 @@ export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, sel
           {onManage && (
             <>
               <View style={[styles.divider, { backgroundColor: color }]} />
-              {/* Tertiary — a navigation action, not another selectable identity in the list above
+              {/* Tertiary - a navigation action, not another selectable identity in the list above
               it, so it reads more like @tastic/hud's SectionedDropdown All/Clear footer button
               (centered, bold, accent-colored) than a normal row. */}
               <TouchableRipple onPress={handleManage} style={styles.row}>
@@ -252,12 +252,12 @@ const styles = StyleSheet.create({
   anchor: {
     position: 'relative'
   },
-  // See InlineColorPicker's identical comment — React Native Web gives every position:'relative'
+  // See InlineColorPicker's identical comment - React Native Web gives every position:'relative'
   // view its own stacking context, so the elevation has to live on the anchor itself.
   anchorOpen: {
     zIndex: 100
   },
-  // Separates Manage (a navigation action) from the selectable rows above it — different kind of
+  // Separates Manage (a navigation action) from the selectable rows above it - different kind of
   // action, not just another row in the same list. Tinted with the seat's own color (passed in as
   // backgroundColor) rather than a flat gray, matching the border/caret's own accent-tinted look.
   divider: {
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
     opacity: 0.25
   },
   // Matches ProfileChip's own default size/shape exactly (see this row's own render-site comment)
-  // — no backgroundColor, unlike ProfileChip's own default: this row has no identity color of its
+  // - no backgroundColor, unlike ProfileChip's own default: this row has no identity color of its
   // own to fill it with, and the render site now colors the icon directly instead.
   guestChip: {
     alignItems: 'center',
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5
   },
-  // Centered rather than left-aligned like a normal row — see this row's own render-site comment
+  // Centered rather than left-aligned like a normal row - see this row's own render-site comment
   // for why (a footer action, not another selectable identity).
   manageRowInner: {
     alignItems: 'center',
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8
   },
-  // Padded on every side (not just top/bottom) — a selected row's own full-color background (see
+  // Padded on every side (not just top/bottom) - a selected row's own full-color background (see
   // `row`'s borderRadius) needs real margin from the menu's own straight edges to read as a rounded
   // pill instead of looking clipped against them.
   menuContent: {

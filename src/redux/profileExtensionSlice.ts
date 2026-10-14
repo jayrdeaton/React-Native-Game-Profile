@@ -19,7 +19,7 @@ export interface ProfileExtensionSlice<TExtension> {
 
 // A per-profile extension is any app-specific field that doesn't belong on the shared base Profile
 // type (a control scheme, a key-binding preference, a difficulty setting, ...) but still needs to
-// travel WITH a specific profile id, entirely locally — never synced to the shared App Group
+// travel WITH a specific profile id, entirely locally - never synced to the shared App Group
 // roster (a profile created on a sibling @tastic game has no idea this extension exists at all,
 // same as this package's own README describes for any app-specific field). Two real @tastic games
 // (BoxHockey's controlScheme, LightCycles' keyScheme) each hand-rolled an almost-identical
@@ -28,10 +28,10 @@ export interface ProfileExtensionSlice<TExtension> {
 // need a third copy.
 //
 // `namespace` prefixes every action type (e.g. 'profileExtension/controlScheme/set') so an app with
-// more than one independent per-profile extension never collides between them — same convention
+// more than one independent per-profile extension never collides between them - same convention
 // @rific/core's createSettingsSlice uses its own namespace argument for.
 //
-// Deliberately NOT auto-cleared when the base `profiles` slice removes an id — this stays a plain,
+// Deliberately NOT auto-cleared when the base `profiles` slice removes an id - this stays a plain,
 // self-contained reducer rather than importing profilesActions.remove's action type to listen for.
 // An app already dispatches multiple independent actions when deleting a profile (profilesActions.
 // remove, and typically its own local selection-slice cleanup); calling this slice's own `remove`

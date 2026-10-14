@@ -100,7 +100,7 @@ describe('createProfileSelectionSlice', () => {
     it('backfills a seat missing from a persisted blob that predates it, instead of leaving it undefined', () => {
       const { reducer } = createProfileSelectionSlice<Seat>('loadout', defaultState)
       // Simulates redux-persist's own default stateReconciler (autoMergeLevel1) hard-replacing this
-      // slice's state with a persisted blob from before seat 2 existed — no such key at all, not
+      // slice's state with a persisted blob from before seat 2 existed - no such key at all, not
       // even `undefined` explicitly, the same shape a real old AsyncStorage blob has.
       const staleState = { 1: 'profile-1' } as Record<Seat, string | null>
       const action = { type: 'persist/REHYDRATE', payload: { profileSelection: staleState } }

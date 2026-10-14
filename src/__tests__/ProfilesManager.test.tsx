@@ -11,7 +11,7 @@ import { ProfileColorProvider } from '../ProfileColorContext'
 import { ProfilesManager, ProfilesManagerHandle, ProfilesManagerProps } from '../ProfilesManager'
 import { Profile } from '../types'
 
-// ProfileChip is this screen's only child component (see ProfilesManager's own imports) — mocked
+// ProfileChip is this screen's only child component (see ProfilesManager's own imports) - mocked
 // down to a jest.fn() the same way this fleet mocks any child, so a roster row's own props to it
 // (which profile, what size) can be asserted directly instead of trying to render through it.
 jest.mock('../ProfileChip', () => ({
@@ -22,7 +22,7 @@ jest.mock('../ProfileChip', () => ({
 // (@rific/*, @tastic/hud, react-native-safe-area-context) that isn't already mocked by this repo's
 // own src/__mocks__ (those only cover 'react-native'/'react-native-paper'). None of it is this
 // file's own logic to verify, so each is stubbed down to the same jest.fn() shape this fleet mocks
-// react-native-paper's own Icon/Text with — a local jest.mock() here, scoped to this test file only,
+// react-native-paper's own Icon/Text with - a local jest.mock() here, scoped to this test file only,
 // same as ColorPicker.test.tsx in the sibling React-Native-Auto-Paper package does for its own
 // one-off '../components/Dialog' mock.
 jest.mock('@rific/auto-paper', () => ({
@@ -41,7 +41,7 @@ jest.mock('@rific/toaster', () => ({
 
 jest.mock('@tastic/hud', () => {
   // jest.mock factories can't close over module-level imports (hoisted above them), hence its own
-  // require — cast to the real module type so the generics below still typecheck (a bare require()
+  // require - cast to the real module type so the generics below still typecheck (a bare require()
   // types as `any`, and TS rejects explicit type arguments on an untyped call).
   const { useCallback, useState } = require('react') as typeof import('react')
   return {
@@ -50,7 +50,7 @@ jest.mock('@tastic/hud', () => {
     // handed: (swatchCount, windowWidth) -> { width, height }.
     getInlineColorPickerContentSize: jest.fn((swatchCount: number, windowWidth: number) => ({ width: 100 + swatchCount, height: 10 + windowWidth })),
     // A faithful, self-contained reimplementation of the real hook (see @tastic/hud's own
-    // usePopoverHost.ts) — not jest.requireActual('@tastic/hud'), which would also eagerly
+    // usePopoverHost.ts) - not jest.requireActual('@tastic/hud'), which would also eagerly
     // evaluate every other module its index.ts re-exports. Needs to be genuinely stateful (not a
     // static { openId: null, ... } stub) so the focus-follows-open tests below can drive
     // host.openId through a real open/close transition.
@@ -68,7 +68,7 @@ jest.mock('react-native-safe-area-context', () => ({
 }))
 
 // This repo's own src/__mocks__/react-native.ts doesn't export KeyboardAvoidingView (nothing else
-// tested so far needed it) — ProfilesManager renders one unconditionally, so this file needs its
+// tested so far needed it) - ProfilesManager renders one unconditionally, so this file needs its
 // own override that adds it, alongside the same View/ScrollView/StyleSheet/Platform stubs the
 // shared mock already provides.
 jest.mock('react-native', () => {
@@ -91,7 +91,7 @@ jest.mock('react-native', () => {
   }
 })
 
-// Likewise, the shared react-native-paper mock only covers Icon/IconButton/Text — ProfilesManager
+// Likewise, the shared react-native-paper mock only covers Icon/IconButton/Text - ProfilesManager
 // also renders Button/Portal/TextInput, so this file needs its own override adding those.
 jest.mock('react-native-paper', () => {
   const stub = ({ children }: any) => children ?? null
@@ -133,9 +133,9 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
 }
 
 // -- mock-tree inspection helpers ---------------------------------------------------------------
-// View/Text/Icon/TouchableRipple/etc are all stubbed down to jest.fn()s above, so — same
+// View/Text/Icon/TouchableRipple/etc are all stubbed down to jest.fn()s above, so - same
 // convention as IconButton.test.tsx/ColorPicker.test.tsx in the sibling React-Native-Auto-Paper
-// package — a row's own onPress/onChangeText/onSubmitEditing is read straight out of the relevant
+// package - a row's own onPress/onChangeText/onSubmitEditing is read straight out of the relevant
 // mock's own .mock.calls and invoked directly, rather than trying to query rendered DOM text out
 // of an intentionally-flattened tree.
 
@@ -161,7 +161,7 @@ function findNode(node: any, predicate: (n: any) => boolean): any {
   return null
 }
 
-// Undefined when no such row was ever rendered — used for both "find the row to press" and "assert
+// Undefined when no such row was ever rendered - used for both "find the row to press" and "assert
 // this row isn't there" (e.g. no delete affordance on the 'new' row).
 function queryTouchableRippleByText(text: string): any {
   const calls = mockTouchableRipple.mock.calls
@@ -188,7 +188,7 @@ function queryDeleteToggle(): any {
 }
 
 // Matches by placeholder (the Name field) or accessibilityLabel (the Tag field, which has no
-// placeholder of its own since it's invisible — see EditRow's own comment on why) so callers can
+// placeholder of its own since it's invisible - see EditRow's own comment on why) so callers can
 // look a field up by "Name"/"Tag" either way, the same as before this field stopped being visible.
 function lastTextInputProps(label: string): any {
   const calls = mockTextInput.mock.calls
@@ -313,7 +313,7 @@ describe('ProfilesManager', () => {
     act(() => findTouchableRippleByText('New Profile').onPress())
     act(() => lastTextInputProps('Name').onChangeText('Daisy'))
     // Text is always re-rendered on any state change of this component (the header alone
-    // guarantees a fresh call every render) — checking it grew is what rules out "submit silently
+    // guarantees a fresh call every render) - checking it grew is what rules out "submit silently
     // did nothing" rather than "the row closed", which an unchanged InlineColorPicker count alone
     // can't tell apart.
     const textCallsBeforeCommit = mockText.mock.calls.length
@@ -325,7 +325,7 @@ describe('ProfilesManager', () => {
     expect(onCreate).toHaveBeenCalledWith({ name: 'Daisy', color: DEFAULT_COLOR, tag: 'D' })
     expect(onSave).not.toHaveBeenCalled()
     expect(mockText.mock.calls.length).toBeGreaterThan(textCallsBeforeCommit)
-    // No EditRow left open anywhere — InlineColorPicker only ever renders inside one.
+    // No EditRow left open anywhere - InlineColorPicker only ever renders inside one.
     expect(mockInlineColorPicker.mock.calls.length).toBe(colorPickerCallsBeforeCommit)
   })
 
@@ -358,8 +358,8 @@ describe('ProfilesManager', () => {
 
   // clampTag (see profilesValidation.ts/its own test suite) prevents typing your way into an
   // invalid tag through this field's own onChangeText, so this now exercises commitEdit's
-  // defensive check via an already-invalid tag loaded straight from a profile's stored data — a
-  // legacy/corrupted value, or one synced in from another app's own looser rules — never touched
+  // defensive check via an already-invalid tag loaded straight from a profile's stored data - a
+  // legacy/corrupted value, or one synced in from another app's own looser rules - never touched
   // through the tag field itself.
   it('drops an invalid tag loaded from storage to empty on save and surfaces an error toast', () => {
     const alice = createProfile({ id: 'a', name: 'Alice', color: '#654321', tag: 'WXYZ' })
@@ -372,7 +372,7 @@ describe('ProfilesManager', () => {
     expect(onSave).toHaveBeenCalledWith('a', { name: 'Alice', color: '#654321', tag: '' })
   })
 
-  it("clamps the tag field's live typing — rejects a keystroke past 3 characters, and a second emoji replaces the first", () => {
+  it("clamps the tag field's live typing - rejects a keystroke past 3 characters, and a second emoji replaces the first", () => {
     renderManager()
     act(() => findTouchableRippleByText('New Profile').onPress())
 
@@ -387,7 +387,7 @@ describe('ProfilesManager', () => {
     expect(lastTextInputProps('Tag').value).toBe('🔥')
   })
 
-  // Without this, the hidden field — even at 1x1 and fully transparent — would still sit in front
+  // Without this, the hidden field - even at 1x1 and fully transparent - would still sit in front
   // of the swatch for hit-testing purposes and swallow the tap meant to open the color popover,
   // since focusing it is always done programmatically (see EditRow's own focus effect), never by
   // tapping the field directly.
@@ -445,9 +445,9 @@ describe('ProfilesManager', () => {
     act(() => findTouchableRippleByText('Alice').onPress())
     act(() => queryDeleteToggle().onPress())
     // Cancel and Delete (react-native-paper's Button) only ever render inside the confirmation
-    // overlay itself — its call count only grows while that overlay is on screen. Text is on the
+    // overlay itself - its call count only grows while that overlay is on screen. Text is on the
     // other hand always re-rendered on any state change (the header alone guarantees a fresh call
-    // every render) — checking it grew is what rules out "Cancel's onPress silently did nothing"
+    // every render) - checking it grew is what rules out "Cancel's onPress silently did nothing"
     // rather than "the overlay closed", which a same-Button-count reading alone can't tell apart.
     const textCallsBeforeCancel = mockText.mock.calls.length
     const buttonCallsBeforeCancel = mockButton.mock.calls.length
@@ -489,7 +489,7 @@ describe('ProfilesManager', () => {
   })
 
   // The react-navigation-web case: a host's screen is hidden, not unmounted, when its router pops
-  // it, so the unmount effect above never fires there — commitPendingEdit is the explicit escape
+  // it, so the unmount effect above never fires there - commitPendingEdit is the explicit escape
   // hatch a host calls instead, from its own back-button handler, right before navigating away.
   it('commitPendingEdit flushes the pending draft through onSave, for hosts whose navigation does not unmount this component', () => {
     const alice = createProfile({ id: 'a', name: 'Alice', color: '#111111', tag: '' })
@@ -521,7 +521,7 @@ describe('ProfilesManager', () => {
     expect(lastInlineColorPickerTag()).toBe('XY')
   })
 
-  // tag.ref is captured straight off TextInput's mocked props here — React 19 passes `ref` through
+  // tag.ref is captured straight off TextInput's mocked props here - React 19 passes `ref` through
   // as a normal prop to a plain (non-forwardRef) function component, same as @rific/focus-chain's
   // own useFocusChain.test.ts does with its raw { focus: mockFocus } fake.
   it('opening the color popover focuses the tag field', () => {

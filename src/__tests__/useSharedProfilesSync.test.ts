@@ -10,7 +10,7 @@ jest.mock('../sharedProfileStore', () => ({
   saveSharedProfiles: jest.fn()
 }))
 
-// A single mocked module instance for the whole file (not re-required per test) — toggling
+// A single mocked module instance for the whole file (not re-required per test) - toggling
 // isSharedProfileStoreAvailable by mutating this object's property, rather than
 // jest.resetModules() + a fresh require(), is what the "unavailable" describe block below relies
 // on: resetModules() would also clear React's own module cache, and a hook rendered against that
@@ -43,7 +43,7 @@ beforeEach(() => {
   jest.clearAllMocks()
 })
 
-describe('useSharedProfilesSync — shared store available', () => {
+describe('useSharedProfilesSync - shared store available', () => {
   it('subscribes to AppState changes on mount and unsubscribes on unmount', () => {
     const remove = jest.fn()
     mockAddEventListener.mockReturnValue({ remove })
@@ -142,7 +142,7 @@ describe('useSharedProfilesSync — shared store available', () => {
   })
 })
 
-describe('useSharedProfilesSync — shared store unavailable', () => {
+describe('useSharedProfilesSync - shared store unavailable', () => {
   beforeEach(() => {
     mockedStore.isSharedProfileStoreAvailable = false
   })
