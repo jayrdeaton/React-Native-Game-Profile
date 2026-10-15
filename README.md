@@ -68,7 +68,7 @@ see its own doc comment for why that component is generic over your own `Profile
   `profiles`/`defaultColor`/`onCreate`/`onSave`/`onDelete` as `ProfilesManager` itself, plus
   `onBack`. Owns its own `ProfilesManagerHandle` ref internally - there's no `ref` prop here, since
   nothing outside it needs one anymore.
-- **`loadSharedProfiles` / `saveSharedProfiles` / `isSharedProfileStoreAvailable`**: an *optional*
+- **`readSharedProfiles` / `loadSharedProfiles` / `saveSharedProfiles` / `isSharedProfileStoreAvailable`**: an *optional*
   cross-app roster, shared between multiple apps of yours via a native iOS App Group (same Apple
   Developer Team, same `"com.apple.security.application-groups"` entitlement value on every
   participating app). This only ever carries the base `Profile` shape above - a host app's own
@@ -84,11 +84,19 @@ see its own doc comment for why that component is generic over your own `Profile
   // Conceptual sketch of the pattern - see "Redux helpers for the shared roster" below for a
   // ready-made version of it.
   const GROUP_ID = 'group.com.yourteam.yourgames'
-  const base = isSharedProfileStoreAvailable ? await loadSharedProfiles(GROUP_ID) : localBaseFallback
+  // null is a failed read, not an empty roster: keep the local copy and write nothing back.
+  const base = (isSharedProfileStoreAvailable ? await readSharedProfiles(GROUP_ID) : null) ?? localBaseFallback
   const profiles = base.map((p) => ({ ...p, controlScheme: localExtensions[p.id]?.controlScheme ?? DEFAULT_CONTROL_SCHEME }))
   // ...on create/update/delete, write the base fields back with saveSharedProfiles(GROUP_ID, nextBase)
   // and the extension field to the app's own local storage, same as today.
   ```
+
+  `readSharedProfiles` resolves to `[]` when nothing has been shared yet and to `null` when the
+  roster is there but couldn't be read (the native call failed, the blob is corrupt, or every entry
+  in it is invalid). Never treat that `null` as an empty roster: an app that replaces its roster
+  with `[]` and then saves deletes every profile from the shared store, for every app in the group.
+  `loadSharedProfiles` is the older form that flattens a failed read to `[]`; use it only where the
+  result can't replace a roster or lead to a write.
 
   Backed by a small native Expo Module (`ios/TasticProfileModule.swift`) wrapping
   `UserDefaults(suiteName:)` - iOS only (see `expo-module.config.json`'s `"apple"`-only platform
@@ -234,13 +242,14 @@ so a host app plugs the reducer(s) into whatever store it already has:
   `profilesReducer` removes a profile - an app already dispatches its own cleanup action(s) on
   delete, so this stays a self-contained reducer rather than new cross-slice wiring.
 - **`resolveInitialProfiles(groupId, localFallback)`**: the one-time initial-load decision: shared
-  store unavailable → `localFallback` verbatim; shared store empty → seed it from `localFallback`;
-  otherwise the shared roster always wins over a possibly-stale local snapshot.
+  store unavailable → `localFallback` verbatim; shared roster unreadable → `localFallback`, writing
+  nothing; shared store empty → seed it from `localFallback`; otherwise the shared roster always
+  wins over a possibly-stale local snapshot.
 - **`useSharedProfilesSync({ groupId, onRemoteChange })`**: keeps a Redux-backed roster in sync for
   the rest of the app's lifetime: call the returned `syncToShared(next)` right after a local roster
   change to mirror it out, and `onRemoteChange` fires with a freshly-loaded roster whenever the app
   returns to the foreground (skipped while a `syncToShared` write is still in flight, so a remote
-  refresh can't clobber a write that hasn't landed yet).
+  refresh can't clobber a write that hasn't landed yet, and skipped when the read fails).
 - **`createProfileSelectionSlice<TSeat>(namespace, defaultState)`**: a factory for the *other*
   per-seat piece of state: which profile id each seat currently has selected (parallel to
   `createProfileExtensionSlice` above, but keyed by seat instead of by profile id). Returns a
@@ -249,7 +258,11 @@ so a host app plugs the reducer(s) into whatever store it already has:
   Unlike `createProfileExtensionSlice`, the seat set can't be derived from `TSeat` alone (types
   don't exist at runtime), so callers pass their own `defaultState` - the same literal object (e.g.
   `{ 1: null, 2: null }`) every app already declares today. `select({ seat, profileId })` sets one
-  seat's selection directly; `clearProfile(profileId)` walks every seat and nulls out any that
+  seat's selection; one profile is never on two seats, so picking a profile another seat already
+  has swaps the two (that seat takes this seat's previous pick, or guest), and REHYDRATE drops any
+  duplicate saved before this rule, keeping the first seat's. A swap moves a profile off a seat
+  without that seat's own select handler running, so reset per-seat state tied to the selection
+  (a profile color override, below) for both seats when a pick swaps. `clearProfile(profileId)` walks every seat and nulls out any that
   currently points at that id - call it when a profile is deleted so no seat is left referencing a
   ghost id. `pruneToRoster(ids)` nulls every seat whose id is no longer in the given roster; dispatch
   it after both `profilesActions.setAll` paths (the initial `resolveInitialProfiles` reconcile and
@@ -321,6 +334,17 @@ const color = profile
 all - a profile-selected seat's guest/CPU memory is neither read nor overwritten while it's active,
 so switching a seat back to "guest" later still recalls whatever guest color it had before a profile
 was ever selected there.
+
+Each seat resolves from its own source, so two of them can land on the same color (a profile saved
+as the other seat's guest color, say). Run seat 2's result through `avoidSeatColorClash` after
+resolving both:
+
+```ts
+const p2Display = avoidSeatColorClash(p1Color, p2Color, [DEFAULT_P1_COLOR, DEFAULT_P2_COLOR])
+```
+
+On a clash, seat 2 shows seat 1's default color, or seat 2's default when seat 1 is already on its
+own. It's for display only: don't persist it, so a guest's or the CPU's remembered color stays put.
 
 ## Install
 

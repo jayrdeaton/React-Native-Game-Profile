@@ -9,7 +9,7 @@ describe('resolveInitialProfiles - shared store unavailable', () => {
     jest.resetModules()
     jest.doMock('../sharedProfileStore', () => ({
       isSharedProfileStoreAvailable: false,
-      loadSharedProfiles: jest.fn(),
+      readSharedProfiles: jest.fn(),
       saveSharedProfiles: jest.fn()
     }))
   })
@@ -20,9 +20,9 @@ describe('resolveInitialProfiles - shared store unavailable', () => {
 
   it('returns localFallback verbatim without touching the shared store', async () => {
     const { resolveInitialProfiles } = require('../redux/resolveInitialProfiles')
-    const { loadSharedProfiles } = require('../sharedProfileStore')
+    const { readSharedProfiles } = require('../sharedProfileStore')
     await expect(resolveInitialProfiles(GROUP_ID, [ALICE])).resolves.toEqual([ALICE])
-    expect(loadSharedProfiles).not.toHaveBeenCalled()
+    expect(readSharedProfiles).not.toHaveBeenCalled()
   })
 })
 
@@ -37,7 +37,7 @@ describe('resolveInitialProfiles - shared store available', () => {
     jest.resetModules()
     jest.doMock('../sharedProfileStore', () => ({
       isSharedProfileStoreAvailable: true,
-      loadSharedProfiles: jest.fn().mockResolvedValue([]),
+      readSharedProfiles: jest.fn().mockResolvedValue([]),
       saveSharedProfiles
     }))
     const { resolveInitialProfiles } = require('../redux/resolveInitialProfiles')
@@ -50,7 +50,7 @@ describe('resolveInitialProfiles - shared store available', () => {
     jest.resetModules()
     jest.doMock('../sharedProfileStore', () => ({
       isSharedProfileStoreAvailable: true,
-      loadSharedProfiles: jest.fn().mockResolvedValue([]),
+      readSharedProfiles: jest.fn().mockResolvedValue([]),
       saveSharedProfiles
     }))
     const { resolveInitialProfiles } = require('../redux/resolveInitialProfiles')
@@ -63,7 +63,7 @@ describe('resolveInitialProfiles - shared store available', () => {
     jest.resetModules()
     jest.doMock('../sharedProfileStore', () => ({
       isSharedProfileStoreAvailable: true,
-      loadSharedProfiles: jest.fn().mockResolvedValue([BOB]),
+      readSharedProfiles: jest.fn().mockResolvedValue([BOB]),
       saveSharedProfiles
     }))
     const { resolveInitialProfiles } = require('../redux/resolveInitialProfiles')
@@ -71,11 +71,24 @@ describe('resolveInitialProfiles - shared store available', () => {
     expect(saveSharedProfiles).not.toHaveBeenCalled()
   })
 
+  it('returns localFallback without writing when the shared roster could not be read', async () => {
+    const saveSharedProfiles = jest.fn()
+    jest.resetModules()
+    jest.doMock('../sharedProfileStore', () => ({
+      isSharedProfileStoreAvailable: true,
+      readSharedProfiles: jest.fn().mockResolvedValue(null),
+      saveSharedProfiles
+    }))
+    const { resolveInitialProfiles } = require('../redux/resolveInitialProfiles')
+    await expect(resolveInitialProfiles(GROUP_ID, [ALICE])).resolves.toEqual([ALICE])
+    expect(saveSharedProfiles).not.toHaveBeenCalled()
+  })
+
   it('a failed seed write is swallowed, still resolving with localFallback', async () => {
     jest.resetModules()
     jest.doMock('../sharedProfileStore', () => ({
       isSharedProfileStoreAvailable: true,
-      loadSharedProfiles: jest.fn().mockResolvedValue([]),
+      readSharedProfiles: jest.fn().mockResolvedValue([]),
       saveSharedProfiles: jest.fn().mockRejectedValue(new Error('write failed'))
     }))
     const { resolveInitialProfiles } = require('../redux/resolveInitialProfiles')

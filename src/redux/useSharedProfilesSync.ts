@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { AppState } from 'react-native'
 
-import { isSharedProfileStoreAvailable, loadSharedProfiles, saveSharedProfiles } from '../sharedProfileStore'
+import { isSharedProfileStoreAvailable, readSharedProfiles, saveSharedProfiles } from '../sharedProfileStore'
 import { Profile } from '../types'
 
 export interface UseSharedProfilesSyncOptions {
@@ -9,8 +9,9 @@ export interface UseSharedProfilesSyncOptions {
   // Called with a freshly-read shared roster whenever the app returns to the foreground - the
   // shared store has no cross-process change notification, so this is what catches "edited a
   // profile in a different @tastic app, then switched back to this one." Skipped while a
-  // syncToShared write is still in flight (see pendingWriteRef below), and never called at all
-  // when the shared store isn't available.
+  // syncToShared write is still in flight (see pendingWriteRef below), skipped when the read fails
+  // (a failed read is not an empty roster, see readSharedProfiles), and never called at all when
+  // the shared store isn't available.
   onRemoteChange: (profiles: Profile[]) => void
 }
 
@@ -47,8 +48,8 @@ export function useSharedProfilesSync({ groupId, onRemoteChange }: UseSharedProf
     let cancelled = false
     const sub = AppState.addEventListener('change', (next) => {
       if (next !== 'active' || pendingWriteRef.current) return
-      loadSharedProfiles(groupId).then((shared) => {
-        if (!cancelled) onRemoteChangeRef.current(shared)
+      readSharedProfiles(groupId).then((shared) => {
+        if (!cancelled && shared !== null) onRemoteChangeRef.current(shared)
       })
     })
     return () => {

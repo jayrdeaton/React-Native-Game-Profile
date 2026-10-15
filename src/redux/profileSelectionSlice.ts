@@ -56,6 +56,15 @@ export interface ProfileSelectionSlice<TSeat extends string | number> {
 // after any profilesActions.setAll (initial reconcile, onRemoteChange), since a sibling app can
 // delete a profile without this app's own deleteProfile ever running. It returns the same state
 // object when nothing changes, so dispatching it on every foreground resume costs no re-render.
+//
+// One profile is never on two seats. `select` picking a profile another seat already has swaps
+// the two: that seat takes this seat's previous pick (a profile, or null for guest), the same rule
+// as @tastic/input's assignSeatScheme. A picker's takenProfileId only hides the other seat's
+// profile while both seats are on screen, so without the swap a 1 Player pick of seat 2's saved
+// profile left both seats on it, and every later 2 Player round recorded a win and a loss for that
+// one profile. A host showing per-seat state tied to the selection (a profile's color override)
+// should reset it for both seats when a pick swaps. REHYDRATE also drops any duplicate saved before
+// this rule existed, keeping the profile on the first seat.
 export function createProfileSelectionSlice<TSeat extends string | number>(namespace: string, defaultState: ProfileSelectionState<TSeat>, mountKey = 'profileSelection'): ProfileSelectionSlice<TSeat> {
   const select = createActionCreator<SelectProfilePayload<TSeat>>(`profileSelection/${namespace}/select`)
   const clearProfile = createActionCreator<string>(`profileSelection/${namespace}/clearProfile`)
@@ -71,9 +80,28 @@ export function createProfileSelectionSlice<TSeat extends string | number>(names
     // that gap - the same pattern createSeatColorsSlice's own REHYDRATE case already uses.
     if (action.type === REHYDRATE) {
       const persisted = (action.payload as Record<string, Partial<ProfileSelectionState<TSeat>>> | undefined)?.[mountKey]
-      return { ...defaultState, ...state, ...persisted }
+      const merged = { ...defaultState, ...state, ...persisted }
+      const seen = new Set<string>()
+      for (const seat of Object.keys(merged) as TSeat[]) {
+        const profileId = merged[seat]
+        if (profileId === null) continue
+        if (seen.has(profileId)) merged[seat] = null
+        else seen.add(profileId)
+      }
+      return merged
     }
-    if (select.match(action)) return { ...state, [action.payload.seat]: action.payload.profileId } as ProfileSelectionState<TSeat>
+    if (select.match(action)) {
+      const { profileId, seat } = action.payload
+      const previous = state[seat] ?? null
+      const next = { ...state, [seat]: profileId } as ProfileSelectionState<TSeat>
+      if (profileId !== null) {
+        // Object.keys yields strings, so a numeric seat compares as a string.
+        for (const other of Object.keys(state) as TSeat[]) {
+          if (String(other) !== String(seat) && state[other] === profileId) next[other] = previous === profileId ? null : previous
+        }
+      }
+      return next
+    }
     if (clearProfile.match(action)) {
       const next = { ...state }
       for (const seat of Object.keys(state) as TSeat[]) {

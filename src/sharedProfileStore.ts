@@ -26,28 +26,43 @@ const PROFILES_KEY = 'sharedProfiles'
 // local-only storage for the base roster too (see this package's README's App Group section).
 export const isSharedProfileStoreAvailable = native !== null
 
-// Reads the shared base-identity roster out of a given App Group suite. Always resolves to an
-// array, never null/throws - an unavailable store, a missing/empty blob, and a corrupt blob all
-// read the same as "nothing shared yet." Entries that fail isValidProfile are dropped individually
+// Reads the shared base-identity roster out of a given App Group suite, telling a failed read
+// apart from an empty roster. Resolves to [] when nothing has been shared yet (a missing/empty
+// blob) or the store is unavailable, and to null when the store is there but its roster couldn't
+// be read: the native call threw, the blob isn't JSON or isn't an array, or it held entries and
+// none of them were valid. Never throws. Entries that fail isValidProfile are dropped individually
 // rather than invalidating the whole roster, since the base fields validated here are the ONLY
 // thing this store is a source of truth for - a host app's own extension fields (a control scheme,
 // anything else) never travel through it at all; see the README for the base/extension split this
 // is meant to be used with.
-export async function loadSharedProfiles(groupId: string): Promise<Profile[]> {
+//
+// A caller that replaces its roster with what it reads, or writes the roster back afterward, must
+// skip a null: taken as an empty roster, a failed read empties the app's roster, and its next
+// write then deletes every profile from the shared store, for every app in the group.
+export async function readSharedProfiles(groupId: string): Promise<Profile[] | null> {
   if (!native) return []
   let json: string | null = null
   try {
     json = await native.getSharedJSON(groupId, PROFILES_KEY)
   } catch {
-    return []
+    return null
   }
   if (!json) return []
   try {
     const parsed: unknown = JSON.parse(json)
-    return Array.isArray(parsed) ? parsed.filter(isValidProfile) : []
+    if (!Array.isArray(parsed)) return null
+    const profiles = parsed.filter(isValidProfile)
+    return parsed.length > 0 && profiles.length === 0 ? null : profiles
   } catch {
-    return []
+    return null
   }
+}
+
+// readSharedProfiles with a failed read flattened to []: always resolves to an array, never
+// null/throws. Kept unchanged for apps that call it directly; prefer readSharedProfiles anywhere a
+// read can replace the roster or lead to a write (see its doc above).
+export async function loadSharedProfiles(groupId: string): Promise<Profile[]> {
+  return (await readSharedProfiles(groupId)) ?? []
 }
 
 // Overwrites the entire shared roster - same whole-blob-write discipline a host app's own

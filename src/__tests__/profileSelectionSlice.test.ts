@@ -42,6 +42,53 @@ describe('createProfileSelectionSlice', () => {
     expect(state).toEqual({ 1: null, 2: null })
   })
 
+  // One profile is never on two seats: picking the other seat's profile swaps the two.
+  describe('select on a profile another seat has', () => {
+    it("swaps: the other seat takes this seat's previous profile", () => {
+      const { actions, reducer } = createProfileSelectionSlice<Seat>('loadout', defaultState)
+      const initial: Record<Seat, string | null> = { 1: 'profile-1', 2: 'profile-2' }
+      expect(reducer(initial, actions.select({ profileId: 'profile-2', seat: 1 }))).toEqual({ 1: 'profile-2', 2: 'profile-1' })
+    })
+
+    it('moves the other seat to guest when this seat had no profile', () => {
+      const { actions, reducer } = createProfileSelectionSlice<Seat>('loadout', defaultState)
+      const initial: Record<Seat, string | null> = { 1: null, 2: 'profile-2' }
+      expect(reducer(initial, actions.select({ profileId: 'profile-2', seat: 1 }))).toEqual({ 1: 'profile-2', 2: null })
+    })
+
+    it('works for string seat ids too', () => {
+      type NamedSeat = 'p1' | 'p2'
+      const { actions, reducer } = createProfileSelectionSlice<NamedSeat>('lobby', { p1: null, p2: null })
+      const initial: Record<NamedSeat, string | null> = { p1: 'profile-1', p2: 'profile-2' }
+      expect(reducer(initial, actions.select({ profileId: 'profile-1', seat: 'p2' }))).toEqual({ p1: 'profile-2', p2: 'profile-1' })
+    })
+
+    it('swaps with the right seat when there are more than two', () => {
+      type ThreeSeats = 1 | 2 | 3
+      const { actions, reducer } = createProfileSelectionSlice<ThreeSeats>('table', { 1: null, 2: null, 3: null })
+      const initial: Record<ThreeSeats, string | null> = { 1: 'profile-1', 2: 'profile-2', 3: 'profile-3' }
+      expect(reducer(initial, actions.select({ profileId: 'profile-3', seat: 1 }))).toEqual({ 1: 'profile-3', 2: 'profile-2', 3: 'profile-1' })
+    })
+
+    it('re-picking the profile a seat already has changes nothing', () => {
+      const { actions, reducer } = createProfileSelectionSlice<Seat>('loadout', defaultState)
+      const initial: Record<Seat, string | null> = { 1: 'profile-1', 2: 'profile-2' }
+      expect(reducer(initial, actions.select({ profileId: 'profile-1', seat: 1 }))).toEqual(initial)
+    })
+
+    it('a pick on a state already holding one profile on both seats leaves the other seat as guest', () => {
+      const { actions, reducer } = createProfileSelectionSlice<Seat>('loadout', defaultState)
+      const initial: Record<Seat, string | null> = { 1: 'profile-1', 2: 'profile-1' }
+      expect(reducer(initial, actions.select({ profileId: 'profile-1', seat: 1 }))).toEqual({ 1: 'profile-1', 2: null })
+    })
+
+    it('picking guest never moves another seat', () => {
+      const { actions, reducer } = createProfileSelectionSlice<Seat>('loadout', defaultState)
+      const initial: Record<Seat, string | null> = { 1: 'profile-1', 2: null }
+      expect(reducer(initial, actions.select({ profileId: null, seat: 2 }))).toEqual({ 1: 'profile-1', 2: null })
+    })
+  })
+
   it('clearProfile nulls out every seat pointing at the given profile id', () => {
     const { actions, reducer } = createProfileSelectionSlice<Seat>('loadout', defaultState)
     const initial: Record<Seat, string | null> = { 1: 'profile-1', 2: 'profile-1' }
@@ -117,6 +164,18 @@ describe('createProfileSelectionSlice', () => {
       const action = { type: 'persist/REHYDRATE', payload: { p1ProfileSelection: persisted, profileSelection: { 1: 'wrong-profile', 2: 'wrong-profile' } } }
 
       expect(reducer(defaultState, action)).toEqual(persisted)
+    })
+
+    it('drops a profile saved on two seats from all but the first', () => {
+      const { reducer } = createProfileSelectionSlice<Seat>('loadout', defaultState)
+      const action = { type: 'persist/REHYDRATE', payload: { profileSelection: { 1: 'profile-1', 2: 'profile-1' } } }
+      expect(reducer(defaultState, action)).toEqual({ 1: 'profile-1', 2: null })
+    })
+
+    it('leaves distinct and guest seats alone', () => {
+      const { reducer } = createProfileSelectionSlice<Seat>('loadout', defaultState)
+      const action = { type: 'persist/REHYDRATE', payload: { profileSelection: { 1: null, 2: 'profile-2' } } }
+      expect(reducer(defaultState, action)).toEqual({ 1: null, 2: 'profile-2' })
     })
   })
 })

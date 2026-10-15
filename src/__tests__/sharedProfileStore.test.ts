@@ -42,6 +42,11 @@ describe('sharedProfileStore - native module unavailable', () => {
     await expect(store.loadSharedProfiles(GROUP_ID)).resolves.toEqual([])
   })
 
+  it('readSharedProfiles resolves to [] (nothing shared), not null (a failed read)', async () => {
+    const store = require('../sharedProfileStore')
+    await expect(store.readSharedProfiles(GROUP_ID)).resolves.toEqual([])
+  })
+
   it('saveSharedProfiles is a no-op', async () => {
     const store = require('../sharedProfileStore')
     await expect(store.saveSharedProfiles(GROUP_ID, [VALID_PROFILE])).resolves.toBeUndefined()
@@ -133,6 +138,66 @@ describe('sharedProfileStore - native module available', () => {
     getSharedJSON.mockResolvedValue(JSON.stringify([VALID_PROFILE, invalidEntry, OTHER_VALID_PROFILE]))
     const store = require('../sharedProfileStore')
     await expect(store.loadSharedProfiles(GROUP_ID)).resolves.toEqual([VALID_PROFILE, OTHER_VALID_PROFILE])
+  })
+
+  it('loadSharedProfiles returns [] when every stored entry is invalid', async () => {
+    getSharedJSON.mockResolvedValue(JSON.stringify([{ ...VALID_PROFILE, color: 'not-a-hex-color' }]))
+    const store = require('../sharedProfileStore')
+    await expect(store.loadSharedProfiles(GROUP_ID)).resolves.toEqual([])
+  })
+
+  // A failed read is null, never [], so a caller can't mistake it for an empty roster and wipe the
+  // shared store with its next write.
+  describe('readSharedProfiles', () => {
+    it('resolves to [] when nothing has been shared yet', async () => {
+      getSharedJSON.mockResolvedValue(null)
+      const store = require('../sharedProfileStore')
+      await expect(store.readSharedProfiles(GROUP_ID)).resolves.toEqual([])
+      expect(getSharedJSON).toHaveBeenCalledWith(GROUP_ID, 'sharedProfiles')
+    })
+
+    it('resolves to [] when the stored blob is an empty string', async () => {
+      getSharedJSON.mockResolvedValue('')
+      const store = require('../sharedProfileStore')
+      await expect(store.readSharedProfiles(GROUP_ID)).resolves.toEqual([])
+    })
+
+    it('resolves to [] for a stored empty roster', async () => {
+      getSharedJSON.mockResolvedValue('[]')
+      const store = require('../sharedProfileStore')
+      await expect(store.readSharedProfiles(GROUP_ID)).resolves.toEqual([])
+    })
+
+    it('resolves to null when the native call throws', async () => {
+      getSharedJSON.mockRejectedValue(new Error('app group read failed'))
+      const store = require('../sharedProfileStore')
+      await expect(store.readSharedProfiles(GROUP_ID)).resolves.toBeNull()
+    })
+
+    it('resolves to null when the stored blob is corrupt JSON', async () => {
+      getSharedJSON.mockResolvedValue('{not valid json')
+      const store = require('../sharedProfileStore')
+      await expect(store.readSharedProfiles(GROUP_ID)).resolves.toBeNull()
+    })
+
+    it('resolves to null when the parsed JSON is not an array', async () => {
+      getSharedJSON.mockResolvedValue(JSON.stringify({ not: 'an array' }))
+      const store = require('../sharedProfileStore')
+      await expect(store.readSharedProfiles(GROUP_ID)).resolves.toBeNull()
+    })
+
+    it('resolves to null when the roster has entries and none of them are valid', async () => {
+      getSharedJSON.mockResolvedValue(JSON.stringify([{ ...VALID_PROFILE, color: 'not-a-hex-color' }, { not: 'a profile' }]))
+      const store = require('../sharedProfileStore')
+      await expect(store.readSharedProfiles(GROUP_ID)).resolves.toBeNull()
+    })
+
+    it('keeps the valid entries when only some are invalid', async () => {
+      const invalidEntry = { ...VALID_PROFILE, id: 'profile-bad', color: 'not-a-hex-color' }
+      getSharedJSON.mockResolvedValue(JSON.stringify([VALID_PROFILE, invalidEntry, OTHER_VALID_PROFILE]))
+      const store = require('../sharedProfileStore')
+      await expect(store.readSharedProfiles(GROUP_ID)).resolves.toEqual([VALID_PROFILE, OTHER_VALID_PROFILE])
+    })
   })
 
   it('saveSharedProfiles writes the JSON-serialized roster under the shared profiles key', async () => {

@@ -15,7 +15,7 @@ npm run build        # tsup, outputs CJS + ESM + types to dist/
 npm run build:watch  # tsup --watch
 npm run lint         # ESLint
 npm run fix          # ESLint --fix
-npm test             # Jest (200 tests)
+npm test             # Jest (228 tests)
 npm run test:watch   # Jest in watch mode
 npm run typecheck    # TypeScript type check (tsc --noEmit)
 npm run verify       # lint + test + typecheck + build, in that order
@@ -40,14 +40,15 @@ src/
   index.ts                  - all public exports
   types.ts                  - Profile interface: id, name, color, tag, createdAt, updatedAt
   profilesValidation.ts     - MAX_PROFILE_NAME_LENGTH/MAX_TAG_LENGTH, isValidTag (plain chars or one ZWJ-joined emoji), isValidProfile (base-fields-only validator)
-  sharedProfileStore.ts     - optional cross-app roster via a native iOS App Group; lazily/optionally resolves expo-modules-core's TasticProfile native module, degrades to unavailable (empty reads, no-op writes) everywhere else
+  sharedProfileStore.ts     - optional cross-app roster via a native iOS App Group; lazily/optionally resolves expo-modules-core's TasticProfile native module, degrades to unavailable (empty reads, no-op writes) everywhere else. readSharedProfiles tells a failed read (null) from an empty roster ([]); loadSharedProfiles flattens both to []
+  seatColorClash.ts         - avoidSeatColorClash(p1Color, p2Color, [p1Default, p2Default]): seat 2's display color moved off seat 1's when both resolve to the same color
   redux/                    - optional Redux-shaped state helpers; no dependency on redux/react-redux, a host app plugs these into its own store
     createActionCreator.ts    - internal `{ type, match }` action-creator factory shared by the slices below; not exported from index.ts
     profilesSlice.ts          - profilesActions (add/update/remove/setAll) + profilesReducer over Profile[], plus createProfileRecord(input) to mint a new Profile
     profileExtensionSlice.ts  - createProfileExtensionSlice<TExtension>(namespace) factory: a host app's own per-profile fields (control scheme, key scheme, ...) as a namespaced Record<profileId, TExtension> slice
     profileSelectionSlice.ts  - createProfileSelectionSlice<TSeat>(namespace, defaultState) factory: select/clearProfile/pruneToRoster actions over which profile each seat last picked (always local, per-device, never the shared roster), generalizing an identical hand-rolled Record<Seat, string | null> reducer 5 @tastic games each carried separately
     seatColorsSlice.ts        - createSeatColorsSlice<TSeat>(namespace, defaultState, mountKey?) factory: a seat's remembered guest color, CPU color, and a manual-recolor override for a profile-selected seat, generalizing an identical hand-rolled slice 4 @tastic games each carried separately (Snake keeps its equivalent fields folded into its own gameSlice.ts instead - a deliberate scope call, not an oversight, see the file's own doc comment)
-    resolveInitialProfiles.ts - one-time initial-roster decision: local fallback when the shared store is unavailable/empty, otherwise shared always wins
+    resolveInitialProfiles.ts - one-time initial-roster decision: local fallback when the shared store is unavailable, unreadable or empty (seeding it only when empty), otherwise shared always wins
     useSharedProfilesSync.ts  - keeps a Redux-backed roster in sync with the shared store: syncToShared() mirrors writes out, an AppState listener refreshes on foreground
   ProfileChip.tsx           - a profile's identity at a glance: filled color circle + tag (or fallback account icon) in a contrast-safe color
   ProfileColorContext.tsx   - ProfileColorProvider: app-wide drawn-color transform for profile colors (Solitaire's muted palette)
@@ -64,8 +65,11 @@ src/
     ProfilesScreen.test.tsx
     profileExtensionSlice.test.ts
     profilesSlice.test.ts
+    profileSelectionSlice.test.ts
     profilesValidation.test.ts
     resolveInitialProfiles.test.ts
+    seatColorClash.test.ts
+    seatColorsSlice.test.ts
     sharedProfileStore.test.ts
     useSharedProfilesSync.test.ts
 ios/
@@ -85,13 +89,14 @@ From `src/index.ts`:
 - `ProfilesManager`, `ProfilesManagerProps`, `ProfilesManagerHandle`, `ProfileEditPatch` - roster management screen; accepts `ref` (React 19 ref-as-prop, no `forwardRef`) exposing `commitPendingEdit()` - a host whose router doesn't genuinely unmount this component on "back" (React Navigation's web renderer keeps popped screens mounted-but-hidden, unlike native) must call this explicitly from its own back-button handler, or a pending edit is silently lost there. The existing unmount-effect fallback still covers every host where navigating away really does unmount (native, hardware back/swipe-back bypassing a custom back button). `ProfileEditPatch` (`name`/`color`/`tag`) is the shape `onCreate`/`onSave` both take - was a private, unexported interface inside `ProfilesManager.tsx` until the `ProfilesScreen` extraction below needed to reference it publicly from `ProfilesScreenProps`'s own `onCreate`/`onSave`, surfacing a small pre-existing gap in this package's public surface rather than adding new API for its own sake.
 - `ProfilesScreen`, `ProfilesScreenProps` - routed profiles-roster screen shell wrapping `ProfilesManager` (see "Profiles screen extraction (2026-09-18)" below for what it owns and why); stays props-in/callbacks-out like `ProfilesManager` itself, never calling a host's own `useProfiles()`/`useGameStats()`-shaped hooks internally, since those hooks' shapes are genuinely per-app
 - `isValidProfile`, `isValidTag`, `MAX_PROFILE_NAME_LENGTH`, `MAX_TAG_LENGTH` - validation
-- `isSharedProfileStoreAvailable`, `loadSharedProfiles`, `saveSharedProfiles` - optional native App Group shared store
+- `isSharedProfileStoreAvailable`, `readSharedProfiles`, `loadSharedProfiles`, `saveSharedProfiles` - optional native App Group shared store (`readSharedProfiles` resolves to `null` on a failed read; `loadSharedProfiles` is the older form that flattens that to `[]`)
 - `profilesActions`, `profilesReducer`, `createProfileRecord`, `CreateProfileInput`, `UpdateProfilePayload` - base roster as a Redux reducer (add/update/remove/setAll) plus a helper to mint a new `Profile`
 - `createProfileExtensionSlice`, `ProfileExtensionActions`, `ProfileExtensionSlice`, `ProfileExtensionState`, `SetProfileExtensionPayload` - factory for a host app's own namespaced per-profile-id extension slice
 - `resolveInitialProfiles` - one-time initial-roster resolution against the shared store
 - `useSharedProfilesSync`, `UseSharedProfilesSyncOptions`, `UseSharedProfilesSyncResult` - keeps a Redux-backed roster synced with the shared store over the app's lifetime
 - `createProfileSelectionSlice`, `ProfileSelectionActions`, `ProfileSelectionSlice`, `ProfileSelectionState`, `SelectProfilePayload` - factory for a host app's own per-seat "which profile is selected here" slice
 - `createSeatColorsSlice`, `SeatColorsActions`, `SeatColorsSlice`, `SeatColorsState`, `SetLastGuestColorPayload`, `SetProfileOverridePayload` - factory for a host app's own per-seat remembered-color slice (guest color, CPU color, profile-override)
+- `avoidSeatColorClash` - seat 2's display color moved off seat 1's on a clash (see "Bug fixes (2026-10-15)" below)
 - `Profile` (type only) - the base identity shape
 
 ## Peer Dependencies
@@ -109,7 +114,7 @@ From `src/index.ts`:
 
 - Framework: Jest (`@infinitetoken/jest-config/react-native`), jsdom environment
 - Mocks in `src/__mocks__/` for `react-native`, `react-native-paper`
-- 200 tests across 12 suites
+- 228 tests across 13 suites
 - Coverage (measured 2026-09-15): **100 / 94.44 / 98.41 / 100** (statements/branches/functions/lines),
   against the shared preset's 70% floor on all four metrics - no local `coverageThreshold` override.
   Branch gaps are in `ProfilesManager.tsx` (lines 88, 108-115, 208-235); the one function gap is
@@ -132,6 +137,16 @@ From `src/index.ts`:
 - `titleVariant`'s `MD3TextVariant` union is a second, separately-declared copy of `ProfilesManager.tsx`'s own local type alias (react-native-paper's MD3 Text variant names, not exported from its public entry point) rather than one shared between the two files - same call `ProfilesManager.tsx` already makes for why it's inlined instead of imported from react-native-paper's internals.
 - `src/__tests__/ProfilesScreen.test.tsx` mirrors `ProfilesManager.test.tsx`'s own structure but mocks `ProfilesManager` down to `jest.fn(() => null)` (same convention `ProfilePicker.test.tsx` uses for its sibling `ProfileChip`) - it only asserts `ProfilesScreen`'s own wiring (props/callbacks pass through unchanged, `headerLeft` is a labeled back-arrow `IconButton`, and the back button calls `commitPendingEdit` before `onBack` via `invocationCallOrder`, with a no-handle-attached-yet case covered too), not `ProfilesManager`'s own rendering.
 - Now `0.6.0` (minor - `ProfilesScreen`/`ProfilesScreenProps` and the newly-exported `ProfileEditPatch` are new/newly-public surface, no breaking change to anything existing).
+
+## Bug fixes (2026-10-15)
+
+Three fixes from the 2026-10-08 fleet audit's follow-ups, found while checking Snake for release. None is published yet.
+
+- **A failed shared read could wipe the roster for every app.** `loadSharedProfiles` resolved to `[]` for a failed read as well as for an empty roster, and both consumers trusted it. `useSharedProfilesSync` handed that `[]` to `onRemoteChange` on a foreground resume, so the app emptied its roster (and `pruneToRoster` cleared both seats), and the app's next profile create then saved a one-profile roster over the shared store, deleting every other profile in every app. `resolveInitialProfiles` did the same at launch: a failed read looked empty, so it seeded the shared store with this app's local snapshot. New `readSharedProfiles` resolves to `null` for a failed read (the native call threw, the blob is corrupt or not an array, or every entry in it is invalid) and `[]` only when nothing has been shared. `useSharedProfilesSync` skips `onRemoteChange` on `null`, and `resolveInitialProfiles` returns `localFallback` without writing. `loadSharedProfiles` keeps its old contract for apps that call it directly (ArcheryDuel, HexFleet, Minesweeper and others); those need to move to `readSharedProfiles` themselves.
+- **One profile could be on both seats.** `select` set a seat without looking at the others, and a picker's `takenProfileId` only hides the other seat's profile while both seats are on screen, so a 1 Player pick of seat 2's saved profile left both seats on it, and every later 2 Player round recorded a win and a loss for that one profile. `select` now swaps (the other seat takes this seat's previous pick, or guest), the same rule as `@tastic/input`'s `assignSeatScheme`, and REHYDRATE drops a duplicate saved before this, keeping the first seat's. Seats are compared as strings, since `Object.keys` turns a numeric seat into one. A host should reset a profile color override for both seats when a pick swaps.
+- **Two seats could resolve to the same color** (audit F042). New `avoidSeatColorClash(p1Color, p2Color, [p1Default, p2Default])`: on a clash, seat 2 shows seat 1's default, or seat 2's default if seat 1 is already on it. LightCycles' lobby rule, which Snake copied locally on 2026-10-14. Display only, not persisted.
+- Tests: `sharedProfileStore.test.ts` (`readSharedProfiles`' empty vs failed cases), `useSharedProfilesSync.test.ts` and `resolveInitialProfiles.test.ts` (their store mocks are now `readSharedProfiles`; a failed read skips the callback / the write), `profileSelectionSlice.test.ts` (swap with numeric, string and three seats, guest, an already-duplicated state, REHYDRATE dedupe) and the new `seatColorClash.test.ts`.
+- New exports: `readSharedProfiles`, `avoidSeatColorClash`. The `select` swap changes behavior for existing callers, so this wants a minor release. Version bump is Jay's.
 
 ## Bug fixes (2026-09-18)
 

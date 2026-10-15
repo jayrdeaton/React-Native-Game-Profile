@@ -6,7 +6,7 @@ import { Profile } from '../types'
 
 jest.mock('../sharedProfileStore', () => ({
   isSharedProfileStoreAvailable: true,
-  loadSharedProfiles: jest.fn(),
+  readSharedProfiles: jest.fn(),
   saveSharedProfiles: jest.fn()
 }))
 
@@ -21,10 +21,10 @@ jest.mock('../sharedProfileStore', () => ({
 // useSharedProfilesSync.ts's own already-imported `isSharedProfileStoreAvailable` reads.
 const mockedStore = jest.requireMock('../sharedProfileStore') as {
   isSharedProfileStoreAvailable: boolean
-  loadSharedProfiles: jest.Mock
+  readSharedProfiles: jest.Mock
   saveSharedProfiles: jest.Mock
 }
-const { loadSharedProfiles, saveSharedProfiles } = mockedStore
+const { readSharedProfiles, saveSharedProfiles } = mockedStore
 
 const GROUP_ID = 'group.tastic.profile'
 const ALICE: Profile = { color: '#2196f3', createdAt: 1000, id: 'profile-1', name: 'Alice', tag: '😎', updatedAt: 1000 }
@@ -54,24 +54,41 @@ describe('useSharedProfilesSync - shared store available', () => {
   })
 
   it('calls onRemoteChange with a freshly-loaded roster when the app becomes active', async () => {
-    loadSharedProfiles.mockResolvedValue([ALICE])
+    readSharedProfiles.mockResolvedValue([ALICE])
     const onRemoteChange = jest.fn()
     renderHook(() => useSharedProfilesSync({ groupId: GROUP_ID, onRemoteChange }))
     await fireAppStateChange('active')
-    expect(loadSharedProfiles).toHaveBeenCalledWith(GROUP_ID)
+    expect(readSharedProfiles).toHaveBeenCalledWith(GROUP_ID)
     expect(onRemoteChange).toHaveBeenCalledWith([ALICE])
+  })
+
+  it('skips onRemoteChange when the shared roster could not be read', async () => {
+    readSharedProfiles.mockResolvedValue(null)
+    const onRemoteChange = jest.fn()
+    renderHook(() => useSharedProfilesSync({ groupId: GROUP_ID, onRemoteChange }))
+    await fireAppStateChange('active')
+    expect(readSharedProfiles).toHaveBeenCalledWith(GROUP_ID)
+    expect(onRemoteChange).not.toHaveBeenCalled()
+  })
+
+  it('still calls onRemoteChange with an empty roster that was read successfully', async () => {
+    readSharedProfiles.mockResolvedValue([])
+    const onRemoteChange = jest.fn()
+    renderHook(() => useSharedProfilesSync({ groupId: GROUP_ID, onRemoteChange }))
+    await fireAppStateChange('active')
+    expect(onRemoteChange).toHaveBeenCalledWith([])
   })
 
   it('ignores a change to a non-active state', async () => {
     const onRemoteChange = jest.fn()
     renderHook(() => useSharedProfilesSync({ groupId: GROUP_ID, onRemoteChange }))
     await fireAppStateChange('background')
-    expect(loadSharedProfiles).not.toHaveBeenCalled()
+    expect(readSharedProfiles).not.toHaveBeenCalled()
     expect(onRemoteChange).not.toHaveBeenCalled()
   })
 
   it('always calls the latest onRemoteChange, not whichever was passed on first mount', async () => {
-    loadSharedProfiles.mockResolvedValue([ALICE])
+    readSharedProfiles.mockResolvedValue([ALICE])
     const first = jest.fn()
     const second = jest.fn()
     const { rerender } = renderHook(({ onRemoteChange }) => useSharedProfilesSync({ groupId: GROUP_ID, onRemoteChange }), { initialProps: { onRemoteChange: first } })
@@ -100,7 +117,7 @@ describe('useSharedProfilesSync - shared store available', () => {
       result.current.syncToShared([ALICE])
     })
     await fireAppStateChange('active')
-    expect(loadSharedProfiles).not.toHaveBeenCalled()
+    expect(readSharedProfiles).not.toHaveBeenCalled()
 
     await act(async () => {
       resolveWrite()
@@ -110,7 +127,7 @@ describe('useSharedProfilesSync - shared store available', () => {
 
   it('a later foreground refresh (after the pending write settles) does call onRemoteChange again', async () => {
     saveSharedProfiles.mockResolvedValue(undefined)
-    loadSharedProfiles.mockResolvedValue([ALICE])
+    readSharedProfiles.mockResolvedValue([ALICE])
     const onRemoteChange = jest.fn()
     const { result } = renderHook(() => useSharedProfilesSync({ groupId: GROUP_ID, onRemoteChange }))
 
@@ -125,7 +142,7 @@ describe('useSharedProfilesSync - shared store available', () => {
 
   it('does not call onRemoteChange again after unmount, even if a load was already in flight', async () => {
     let resolveLoad: (profiles: Profile[]) => void = () => {}
-    loadSharedProfiles.mockReturnValue(new Promise<Profile[]>((resolve) => (resolveLoad = resolve)))
+    readSharedProfiles.mockReturnValue(new Promise<Profile[]>((resolve) => (resolveLoad = resolve)))
     const onRemoteChange = jest.fn()
     const { unmount } = renderHook(() => useSharedProfilesSync({ groupId: GROUP_ID, onRemoteChange }))
 

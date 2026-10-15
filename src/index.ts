@@ -10,5 +10,6 @@ export { type CreateProfileInput, createProfileRecord, profilesActions, profiles
 export { resolveInitialProfiles } from './redux/resolveInitialProfiles'
 export { createSeatColorsSlice, type SeatColorsActions, type SeatColorsSlice, type SeatColorsState, type SetLastGuestColorPayload, type SetProfileOverridePayload } from './redux/seatColorsSlice'
 export { useSharedProfilesSync, type UseSharedProfilesSyncOptions, type UseSharedProfilesSyncResult } from './redux/useSharedProfilesSync'
-export { isSharedProfileStoreAvailable, loadSharedProfiles, saveSharedProfiles } from './sharedProfileStore'
+export { avoidSeatColorClash } from './seatColorClash'
+export { isSharedProfileStoreAvailable, loadSharedProfiles, readSharedProfiles, saveSharedProfiles } from './sharedProfileStore'
 export type { Profile } from './types'
