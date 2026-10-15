@@ -312,13 +312,10 @@ it.
   saved color live." Cleared only when that seat's own profile selection genuinely changes, never by
   merely leaving and returning to the screen.
 
-None of these three are exports of this package today. `lastGuestColor`/`lastCpuColor` predate it
-entirely, and `profileOverride` is still hand-rolled per app - typically alongside
-`createProfileSelectionSlice`'s own selection state, in the same seat-scoped slice (see e.g.
-BoxHockey's `src/redux/seatColorsSlice.ts`) or folded into the app's own `gameSlice.ts` when there's
-no dedicated slice to put it in (see Snake's `src/redux/gameSlice.ts`). This section exists so a new
-app's author reads the convention here first, rather than hand-rolling something that quietly can't
-interop with the rest of the fleet.
+All three live in one slice from this package's `createSeatColorsSlice` (since 0.5.0), which every
+flagship game uses (see e.g. BoxHockey's or Snake's `src/redux/seatColorsSlice.ts`). This section
+exists so a new app's author reads the convention here first, rather than hand-rolling something
+that quietly can't interop with the rest of the fleet.
 
 The resolution order at a loadout/lobby screen, for one seat:
 
