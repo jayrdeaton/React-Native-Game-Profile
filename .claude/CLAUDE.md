@@ -53,7 +53,7 @@ src/
   ProfileChip.tsx           - a profile's identity at a glance: filled color circle + tag (or fallback account icon) in a contrast-safe color
   ProfileColorContext.tsx   - ProfileColorProvider: app-wide drawn-color transform for profile colors (Solitaire's muted palette)
   ProfilePicker.tsx         - name trigger + selection popover; generic over an app's own richer Profile type; selection-only (no create/rename/delete)
-  ProfilesManager.tsx       - the roster screen: create/rename/recolor/retag/delete inline in the tapped row, with a destructive-delete confirmation card; no navigation of its own
+  ProfilesManager.tsx       - the roster screen: create/rename/recolor/retag/delete inline in the tapped row, with @tastic/hud's destructive ConfirmDialog to confirm a delete; no navigation of its own
   ProfilesScreen.tsx        - routed screen shell wrapping ProfilesManager: container View + theme-derived bg/fg + back button + commit-pending-edit-before-navigate composition, folding in what every fleet app used to hand-roll around ProfilesManager itself (see "Profiles screen extraction" below)
   __mocks__/
     react-native.ts         - jest mock: StyleSheet, Platform, Appearance, View/ScrollView/Pressable/useWindowDimensions stubs
@@ -137,6 +137,17 @@ From `src/index.ts`:
 - `titleVariant`'s `MD3TextVariant` union is a second, separately-declared copy of `ProfilesManager.tsx`'s own local type alias (react-native-paper's MD3 Text variant names, not exported from its public entry point) rather than one shared between the two files - same call `ProfilesManager.tsx` already makes for why it's inlined instead of imported from react-native-paper's internals.
 - `src/__tests__/ProfilesScreen.test.tsx` mirrors `ProfilesManager.test.tsx`'s own structure but mocks `ProfilesManager` down to `jest.fn(() => null)` (same convention `ProfilePicker.test.tsx` uses for its sibling `ProfileChip`) - it only asserts `ProfilesScreen`'s own wiring (props/callbacks pass through unchanged, `headerLeft` is a labeled back-arrow `IconButton`, and the back button calls `commitPendingEdit` before `onBack` via `invocationCallOrder`, with a no-handle-attached-yet case covered too), not `ProfilesManager`'s own rendering.
 - Now `0.6.0` (minor - `ProfilesScreen`/`ProfilesScreenProps` and the newly-exported `ProfileEditPatch` are new/newly-public surface, no breaking change to anything existing).
+
+## The delete confirmation is hud's ConfirmDialog (2026-10-15)
+
+`ProfilesManager`'s "Delete Profile?" used to be its own card: literal black/white (or the host's
+`cardBg`), a 1pt border, and Cancel and Delete as two stacked contained 160pt buttons. Jay wants one look
+for every dialog in the fleet ("I value consistency above all else"), so it is now `@tastic/hud`'s
+`ConfirmDialog` (`destructive`, `icon='alert-outline'`, Cancel/Delete side by side, the theme's
+untinted blurred card and DialogHeader), the same card as Reset Everything?, Quit Match? and every
+app's New Game confirm. `ConfirmDialog` has had `destructive` since hud 0.7, so the `>=0.12.0` peer
+range still holds. `cardBg` (ProfilesManager and ProfilesScreen) only ever colored that card, so it is
+gone; Solitaire was the only app passing it. The tests read the props handed to a `ConfirmDialog` stub.
 
 ## Bug fixes (2026-10-15)
 

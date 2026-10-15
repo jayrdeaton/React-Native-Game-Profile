@@ -33,11 +33,10 @@ export interface ProfilesScreenProps {
   // Independently optional overrides, each defaulting to the same literal-black/white-by-appearance
   // formula every current caller renders with unchanged (none of them pass these today) - same
   // convention as BaseStatsScreen's and ProfilesManager's own fg/bg-shaped overrides. fg/fgMuted/
-  // cardBg/titleVariant/colorPreview are forwarded straight through to the internal ProfilesManager.
+  // titleVariant/colorPreview are forwarded straight through to the internal ProfilesManager.
   fg?: string
   fgMuted?: string
   bg?: string
-  cardBg?: string
   titleVariant?: MD3TextVariant
   colorPreview?: (hex: string) => string
   // Forwarded straight through to the internal ProfilesManager - a placement hook for the color swatch popover, for
@@ -53,7 +52,7 @@ export interface ProfilesScreenProps {
 // still doesn't call useProfiles()/useGameStats() (or any host-specific hook) itself - those two
 // hooks' shapes are genuinely app-specific (different CreateProfileInput/GameStatsContextValue per
 // app), so this stays props-in/callbacks-out, exactly like ProfilesManager itself.
-export function ProfilesScreen({ profiles, defaultColor, onCreate, onSave, onDelete, onBack, fg: fgOverride, fgMuted, bg: bgOverride, cardBg, titleVariant, colorPreview, useColorPickerAlign }: ProfilesScreenProps) {
+export function ProfilesScreen({ profiles, defaultColor, onCreate, onSave, onDelete, onBack, fg: fgOverride, fgMuted, bg: bgOverride, titleVariant, colorPreview, useColorPickerAlign }: ProfilesScreenProps) {
   const { dark } = useAutoPaperTheme()
   // Owns the ref itself - nothing outside this component ever needs it, since this is now the one
   // thing that both renders ProfilesManager AND owns the only navigation trigger next to it.
@@ -75,7 +74,7 @@ export function ProfilesScreen({ profiles, defaultColor, onCreate, onSave, onDel
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
-      <ProfilesManager ref={managerRef} profiles={profiles} defaultColor={defaultColor} onCreate={onCreate} onSave={onSave} onDelete={onDelete} fg={fg} fgMuted={fgMuted} cardBg={cardBg} titleVariant={titleVariant} colorPreview={colorPreview} useColorPickerAlign={useColorPickerAlign} headerLeft={<IconButton icon='arrow-left' iconColor={fg} size={24} onPress={handleBack} accessibilityLabel='Back' />} />
+      <ProfilesManager ref={managerRef} profiles={profiles} defaultColor={defaultColor} onCreate={onCreate} onSave={onSave} onDelete={onDelete} fg={fg} fgMuted={fgMuted} titleVariant={titleVariant} colorPreview={colorPreview} useColorPickerAlign={useColorPickerAlign} headerLeft={<IconButton icon='arrow-left' iconColor={fg} size={24} onPress={handleBack} accessibilityLabel='Back' />} />
     </View>
   )
 }

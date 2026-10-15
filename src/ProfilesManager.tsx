@@ -2,10 +2,10 @@ import { defaultColors, useAutoPaperTheme } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
 import { useFocusChain } from '@rific/focus-chain'
 import { useToast } from '@rific/toaster'
-import { getInlineColorPickerContentSize, InlineColorPicker, PopoverHost, usePopoverHost } from '@tastic/hud'
+import { ConfirmDialog, getInlineColorPickerContentSize, InlineColorPicker, PopoverHost, usePopoverHost } from '@tastic/hud'
 import { ComponentProps, ReactNode, Ref, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
-import { Button, Icon, Portal, Text, TextInput } from 'react-native-paper'
+import { Icon, Text, TextInput } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ProfileChip } from './ProfileChip'
@@ -62,17 +62,13 @@ export interface ProfilesManagerProps {
   // React 19 accepts `ref` as a plain prop on a function component (no forwardRef needed) - see
   // ProfilesManagerHandle's own doc for why a host may need this.
   ref?: Ref<ProfilesManagerHandle>
-  // Independently optional overrides for this screen's text/card colors - each defaults to the same
-  // literal-black/white-by-appearance formula as before when omitted, so every existing caller
-  // (none of which pass these) renders identically to before. Same convention as @tastic/hud's
-  // BaseStatsScreen fg/cardBg overrides, for a caller with its own app-wide chrome palette instead
-  // of that literal black/white convention. cardBorder/cancelBg/cancelFg have no override, matching
-  // BaseStatsScreen's identical reasoning for cardBorder: their low-alpha/neutral values already
-  // read fine against any cardBg, and (for Cancel specifically) are deliberately neutral rather than
-  // theme-derived so a host's own live gameplay/seat color can't land there by coincidence.
+  // Independently optional overrides for this screen's text colors - each defaults to the same
+  // literal-black/white-by-appearance formula as before when omitted. Same convention as @tastic/hud's
+  // BaseStatsScreen fg override, for a caller with its own app-wide chrome palette instead of that
+  // literal black/white convention. (cardBg, which only colored the delete confirmation, went with it
+  // when that became hud's ConfirmDialog, 0.13.0.)
   fg?: string
   fgMuted?: string
-  cardBg?: string
   // 'headlineSmall' (this screen's own default, below), matching BaseStatsScreen's own settled
   // default and the reasoning behind it - this title sits next to a small headerLeft back-button
   // glyph the same way, and the previous hardcoded 'displaySmall' read as oversized there too.
@@ -115,12 +111,12 @@ function deriveTag(name: string): string {
 // really unmounts it on a given host's router - see ProfilesManagerHandle's own doc for the
 // react-navigation-web case where it doesn't, and why a host there needs the `ref` escape hatch
 // instead of relying on the unmount fallback alone.
-export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDelete, headerLeft, ref, fg: fgOverride, fgMuted: fgMutedOverride, cardBg: cardBgOverride, titleVariant = 'headlineSmall', colorPreview: colorPreviewProp, useColorPickerAlign }: ProfilesManagerProps) {
+export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDelete, headerLeft, ref, fg: fgOverride, fgMuted: fgMutedOverride, titleVariant = 'headlineSmall', colorPreview: colorPreviewProp, useColorPickerAlign }: ProfilesManagerProps) {
   // An explicit prop wins; otherwise the app-wide ProfileColorProvider's, so the swatch previews
   // match the ProfileChips drawn in the list.
   const contextColorPreview = useProfileColorPreview()
   const colorPreview = colorPreviewProp ?? contextColorPreview
-  const { dark, colors } = useAutoPaperTheme()
+  const { dark } = useAutoPaperTheme()
   const insets = useSafeAreaInsets()
   const { error: showErrorToast } = useToast()
   // Only one row is ever in edit mode at a time (see commitEdit, called before any new row opens),
@@ -128,12 +124,6 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
   const host = usePopoverHost()
   const fg = fgOverride ?? (dark ? '#FFFFFF' : '#000000')
   const fgMuted = fgMutedOverride ?? (dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)')
-  const cardBg = cardBgOverride ?? (dark ? '#111111' : '#F2F2F2')
-  const cardBorder = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'
-  // A contained neutral, not an outlined one - reads as "the other button" next to Delete's solid
-  // danger fill, rather than looking unfinished/secondary beside it.
-  const cancelBg = dark ? '#2A2A2A' : '#E0E0E0'
-  const cancelFg = dark ? '#FFFFFF' : '#000000'
 
   // 'new' clears back to null once a commit resolves - there's only ever one row open at a time.
   const [editingId, setEditingId] = useState<string | 'new' | null>(null)
@@ -296,32 +286,11 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {confirmDeleteProfile && (
-        <Portal>
-          <View style={styles.overlay}>
-            <View style={[styles.overlayCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
-              <Icon source='alert-outline' size={64} color={colors.danger} />
-              <Text variant='headlineLarge' style={[styles.overlayTitle, { color: colors.danger }]}>
-                Delete Profile?
-              </Text>
-              <Text variant='bodyLarge' style={[styles.overlayBody, { color: fg }]}>
-                This permanently deletes {confirmDeleteProfile.name}&rsquo;s profile. This cannot be undone.
-              </Text>
-              {/* Contained neutral, not buttonColor={colors.primary} - colors.primary is often a
-              live gameplay/seat color in host apps, so a contained Cancel in that color would just
-              be whatever's currently painted there, with no relation to "safe to tap". */}
-              <Button mode='contained' onPress={() => setConfirmDeleteId(null)} style={styles.overlayButton} buttonColor={cancelBg} textColor={cancelFg}>
-                Cancel
-              </Button>
-              {/* colors.danger/onDanger - auto-paper's actual semantic role for this, not a seat's
-              own live color by luck of the default palette. */}
-              <Button mode='contained' onPress={handleConfirmDelete} style={styles.overlayButton} buttonColor={colors.danger} textColor={colors.onDanger}>
-                Delete
-              </Button>
-            </View>
-          </View>
-        </Portal>
-      )}
+      {/* hud's ConfirmDialog, the one confirm card every app in the fleet uses, so this reads like the
+        Reset Everything?/New Game confirms beside it (Jay, 2026-10-15: one look for every dialog). It
+        used to be its own card here, in this screen's literal black/white (or the host's cardBg), with
+        two stacked contained buttons. */}
+      <ConfirmDialog visible={confirmDeleteProfile !== null} title='Delete Profile?' message={confirmDeleteProfile ? `This permanently deletes ${confirmDeleteProfile.name}\u2019s profile. This cannot be undone.` : ''} confirmLabel='Delete' cancelLabel='Cancel' icon='alert-outline' destructive onConfirm={handleConfirmDelete} onCancel={() => setConfirmDeleteId(null)} />
     </>
   )
 }
@@ -466,27 +435,6 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderWidth: 2
   },
-  overlay: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    bottom: 0,
-    justifyContent: 'center',
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0
-  },
-  overlayBody: { textAlign: 'center' },
-  overlayButton: { width: 160 },
-  overlayCard: {
-    alignItems: 'center',
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 16,
-    maxWidth: 360,
-    padding: 32
-  },
-  overlayTitle: { fontWeight: 'bold', marginBottom: -8 },
   row: {
     borderRadius: 8,
     paddingVertical: 8

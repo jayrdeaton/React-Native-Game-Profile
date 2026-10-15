@@ -180,7 +180,7 @@ Same `profiles`/`defaultColor`/`onCreate`/`onSave`/`onDelete` props as `Profiles
 `ProfileEditPatch`-shaped, still deliberately not widened to your own richer `CreateProfileInput`;
 compose any extra required fields (a key/control scheme, whatever's specific to your game) in your
 own closure at the call site, exactly as you already would calling `ProfilesManager` directly -
-plus `onBack`. `fg`/`fgMuted`/`bg`/`cardBg`/`titleVariant`/`colorPreview` are all independently
+plus `onBack`. `fg`/`fgMuted`/`bg`/`titleVariant`/`colorPreview` are all independently
 optional and forward straight through to the internal `ProfilesManager` (`bg` is new here -
 `ProfilesManager` itself has no `bg`, since it doesn't own a container `View` of its own).
 

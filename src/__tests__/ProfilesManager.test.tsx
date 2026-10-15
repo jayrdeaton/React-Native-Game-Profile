@@ -1,10 +1,10 @@
 import { defaultColors, useAutoPaperTheme } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
 import { useToast } from '@rific/toaster'
-import { getInlineColorPickerContentSize, InlineColorPicker } from '@tastic/hud'
+import { ConfirmDialog, getInlineColorPickerContentSize, InlineColorPicker } from '@tastic/hud'
 import { act, render } from '@testing-library/react'
 import { createRef } from 'react'
-import { Button, Icon, Text, TextInput } from 'react-native-paper'
+import { Icon, Text, TextInput } from 'react-native-paper'
 
 import { ProfileChip } from '../ProfileChip'
 import { ProfileColorProvider } from '../ProfileColorContext'
@@ -45,6 +45,8 @@ jest.mock('@tastic/hud', () => {
   // types as `any`, and TS rejects explicit type arguments on an untyped call).
   const { useCallback, useState } = require('react') as typeof import('react')
   return {
+    // hud's real confirm card (its own tests cover it); here only the props it was handed matter.
+    ConfirmDialog: jest.fn(() => null),
     InlineColorPicker: jest.fn(() => null),
     // A deterministic stand-in for hud's pure sizing helper, so a test can predict exactly what the placement hook is
     // handed: (swatchCount, windowWidth) -> { width, height }.
@@ -92,14 +94,12 @@ jest.mock('react-native', () => {
 })
 
 // Likewise, the shared react-native-paper mock only covers Icon/IconButton/Text - ProfilesManager
-// also renders Button/Portal/TextInput, so this file needs its own override adding those.
+// also renders TextInput, so this file needs its own override adding it.
 jest.mock('react-native-paper', () => {
   const stub = ({ children }: any) => children ?? null
   return {
     Icon: jest.fn(() => null),
     Text: jest.fn(stub),
-    Button: jest.fn(stub),
-    Portal: jest.fn(stub),
     TextInput: jest.fn(() => null)
   }
 })
@@ -109,9 +109,7 @@ const mockUseToast = useToast as jest.MockedFunction<typeof useToast>
 const mockTouchableRipple = TouchableRipple as jest.MockedFunction<typeof TouchableRipple>
 const mockInlineColorPicker = InlineColorPicker as jest.MockedFunction<typeof InlineColorPicker>
 const mockTextInput = TextInput as jest.MockedFunction<typeof TextInput>
-const mockButton = Button as jest.MockedFunction<typeof Button>
 const mockText = Text as jest.MockedFunction<typeof Text>
-const mockIcon = Icon as jest.MockedFunction<typeof Icon>
 const mockProfileChip = ProfileChip as jest.MockedFunction<typeof ProfileChip>
 
 const DANGER_COLOR = '#B00020'
@@ -199,15 +197,6 @@ function lastTextInputProps(label: string): any {
   throw new Error(`No TextInput renders placeholder/accessibilityLabel "${label}"`)
 }
 
-function lastButtonProps(label: string): any {
-  const calls = mockButton.mock.calls
-  for (let i = calls.length - 1; i >= 0; i--) {
-    const props = calls[i][0] as any
-    if (flattenText(props.children) === label) return props
-  }
-  throw new Error(`No Button renders label "${label}"`)
-}
-
 function lastInlineColorPickerValue(): string {
   const calls = mockInlineColorPicker.mock.calls
   return (calls[calls.length - 1][0] as any).value
@@ -221,6 +210,10 @@ function lastInlineColorPickerTag(): string {
 function lastInlineColorPickerHost(): any {
   const calls = mockInlineColorPicker.mock.calls
   return (calls[calls.length - 1][0] as any).host
+}
+
+function lastConfirmProps(): any {
+  return (ConfirmDialog as jest.Mock).mock.lastCall![0]
 }
 
 function hasTextContaining(...fragments: string[]): boolean {
@@ -427,16 +420,17 @@ describe('ProfilesManager', () => {
     expect(lastInlineColorPickerValue()).toBe('#222222')
   })
 
-  it('the delete icon opens a confirmation naming the profile', () => {
+  // hud's ConfirmDialog (Jay, 2026-10-15: one confirm card for the whole fleet), destructive, so its
+  // header and Delete button take the danger role.
+  it("the delete icon opens hud's destructive confirmation naming the profile", () => {
     const alice = createProfile({ id: 'a', name: 'Alice' })
     renderManager({ profiles: [alice] })
+    expect(lastConfirmProps().visible).toBe(false)
     act(() => findTouchableRippleByText('Alice').onPress())
     act(() => queryDeleteToggle().onPress())
 
-    expect(hasTextContaining('Delete Profile?')).toBe(true)
-    expect(hasTextContaining('permanently deletes', 'Alice')).toBe(true)
-    const alertIcon = mockIcon.mock.calls.find(([props]) => (props as any).source === 'alert-outline')
-    expect((alertIcon?.[0] as any).color).toBe(DANGER_COLOR)
+    expect(lastConfirmProps()).toMatchObject({ visible: true, title: 'Delete Profile?', icon: 'alert-outline', destructive: true, confirmLabel: 'Delete', cancelLabel: 'Cancel' })
+    expect(lastConfirmProps().message).toBe('This permanently deletes Alice\u2019s profile. This cannot be undone.')
   })
 
   it('cancelling the delete confirmation leaves the profile untouched', () => {
@@ -444,19 +438,10 @@ describe('ProfilesManager', () => {
     const { onDelete } = renderManager({ profiles: [alice] })
     act(() => findTouchableRippleByText('Alice').onPress())
     act(() => queryDeleteToggle().onPress())
-    // Cancel and Delete (react-native-paper's Button) only ever render inside the confirmation
-    // overlay itself - its call count only grows while that overlay is on screen. Text is on the
-    // other hand always re-rendered on any state change (the header alone guarantees a fresh call
-    // every render) - checking it grew is what rules out "Cancel's onPress silently did nothing"
-    // rather than "the overlay closed", which a same-Button-count reading alone can't tell apart.
-    const textCallsBeforeCancel = mockText.mock.calls.length
-    const buttonCallsBeforeCancel = mockButton.mock.calls.length
-
-    act(() => lastButtonProps('Cancel').onPress())
+    act(() => lastConfirmProps().onCancel())
 
     expect(onDelete).not.toHaveBeenCalled()
-    expect(mockText.mock.calls.length).toBeGreaterThan(textCallsBeforeCancel)
-    expect(mockButton.mock.calls.length).toBe(buttonCallsBeforeCancel)
+    expect(lastConfirmProps().visible).toBe(false)
   })
 
   it('confirming delete calls onDelete and closes the row that was being edited', () => {
@@ -465,14 +450,11 @@ describe('ProfilesManager', () => {
     act(() => findTouchableRippleByText('Alice').onPress())
     act(() => queryDeleteToggle().onPress())
     const colorPickerCallsBeforeCommit = mockInlineColorPicker.mock.calls.length
-    const textCallsBeforeConfirm = mockText.mock.calls.length
-    const buttonCallsBeforeConfirm = mockButton.mock.calls.length
 
-    act(() => lastButtonProps('Delete').onPress())
+    act(() => lastConfirmProps().onConfirm())
 
     expect(onDelete).toHaveBeenCalledWith('a')
-    expect(mockText.mock.calls.length).toBeGreaterThan(textCallsBeforeConfirm)
-    expect(mockButton.mock.calls.length).toBe(buttonCallsBeforeConfirm)
+    expect(lastConfirmProps().visible).toBe(false)
     // The row being edited when its own delete was confirmed closes along with it.
     expect(mockInlineColorPicker.mock.calls.length).toBe(colorPickerCallsBeforeCommit)
   })

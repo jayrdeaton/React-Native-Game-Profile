@@ -107,14 +107,13 @@ describe('ProfilesScreen', () => {
     expect(props.headerLeft.props.iconColor).toBe('#FFFFFF')
   })
 
-  it('fg/fgMuted/cardBg/titleVariant/colorPreview overrides are forwarded straight through to ProfilesManager', () => {
+  it('fg/fgMuted/titleVariant/colorPreview overrides are forwarded straight through to ProfilesManager', () => {
     const colorPreview = jest.fn()
-    renderScreen({ fg: '#123123', fgMuted: '#456456', cardBg: '#abcabc', titleVariant: 'titleLarge', colorPreview })
+    renderScreen({ fg: '#123123', fgMuted: '#456456', titleVariant: 'titleLarge', colorPreview })
 
     const props = lastManagerProps()
     expect(props.fg).toBe('#123123')
     expect(props.fgMuted).toBe('#456456')
-    expect(props.cardBg).toBe('#abcabc')
     expect(props.titleVariant).toBe('titleLarge')
     expect(props.colorPreview).toBe(colorPreview)
     // The back button's own iconColor tracks the resolved fg override too, same as the light/dark
