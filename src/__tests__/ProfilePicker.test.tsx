@@ -461,7 +461,7 @@ describe('ProfilePicker', () => {
   describe('colorSection', () => {
     const SWATCH = (i: number) => `#0000${i.toString(16).padStart(2, '0')}`
     const section = (overrides: Partial<ProfilePickerColorSection> = {}): ProfilePickerColorSection => ({ value: SWATCH(3), onChange: jest.fn(), ...overrides })
-    const swatchCalls = () => mockTouchableRipple.mock.calls.filter((call) => /^Color \d+(, profile color)?$/.test((call[0] as { accessibilityLabel?: string }).accessibilityLabel ?? ''))
+    const swatchCalls = () => mockTouchableRipple.mock.calls.filter((call) => /^Color \d+(, (profile color|taken|swap))?$/.test((call[0] as { accessibilityLabel?: string }).accessibilityLabel ?? ''))
 
     it("leads the trigger with a chip in the live color and the selected profile's tag", () => {
       renderPicker({ colorSection: section(), selectedId: AMY.id, color: '#abcdef' })
@@ -615,6 +615,35 @@ describe('ProfilePicker', () => {
           .map((call) => (call[0] as { accessibilityLabel: string }).accessibilityLabel)
           .filter((label) => label.endsWith(', profile color'))
       ).toEqual([])
+    })
+
+    it("fades and disables another seat's color, marked with an X", () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), colorSection: section({ takenValue: SWATCH(9).toUpperCase() }) })
+      openColorPage()
+      const swatches = swatchCalls().map((call) => call[0] as { accessibilityLabel: string; disabled?: boolean; style?: unknown[] })
+      expect(swatches.filter((props) => props.disabled).map((props) => props.accessibilityLabel)).toEqual(['Color 9, taken'])
+      expect(swatches[9].style).toContainEqual(expect.objectContaining({ opacity: 0.35 }))
+      expect(findIcon('close')?.color).toBe(`contrast(${SWATCH(9)})`)
+      expect(findIcon('swap-horizontal')).toBeUndefined()
+    })
+
+    it('lets the taken color be picked with allowSwapTaken, marked with a swap icon', () => {
+      const onChange = jest.fn()
+      renderPicker({ host: makeHost(TRIGGER_ID), colorSection: section({ onChange, takenValue: SWATCH(9), allowSwapTaken: true }) })
+      openColorPage()
+      const swatch = swatchCalls()[9]
+      expect(swatch[0]).toMatchObject({ accessibilityLabel: 'Color 9, swap', disabled: false })
+      expect(findIcon('swap-horizontal')).toBeDefined()
+      expect(findIcon('close')).toBeUndefined()
+      act(() => pressOf(swatch)!())
+      expect(onChange).toHaveBeenCalledWith(SWATCH(9))
+    })
+
+    it('never marks the color in effect as taken', () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), colorSection: section({ takenValue: SWATCH(3) }) })
+      openColorPage()
+      expect(swatchCalls().filter((call) => (call[0] as { disabled?: boolean }).disabled)).toHaveLength(0)
+      expect(findIcon('check')).toBeDefined()
     })
 
     it('commits the raw color on a swatch press and leaves the popover open', () => {

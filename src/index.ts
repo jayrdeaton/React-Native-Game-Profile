@@ -1,3 +1,4 @@
+export { getOptionPickerContentSize, OptionPicker, type OptionPickerOption } from './OptionPicker'
 export { ProfileChip } from './ProfileChip'
 export { ProfileColorProvider, useProfileColorPreview, useProfileDisplayColor } from './ProfileColorContext'
 export { getProfilePickerContentSize, ProfilePicker, type ProfilePickerAlignResult, type ProfilePickerColorSection, type ProfilePickerContentSize } from './ProfilePicker'
@@ -8,7 +9,7 @@ export { createProfileExtensionSlice, type ProfileExtensionActions, type Profile
 export { createProfileSelectionSlice, type ProfileSelectionActions, type ProfileSelectionSlice, type ProfileSelectionState, type SelectProfilePayload } from './redux/profileSelectionSlice'
 export { type CreateProfileInput, createProfileRecord, profilesActions, profilesReducer, type UpdateProfilePayload } from './redux/profilesSlice'
 export { resolveInitialProfiles } from './redux/resolveInitialProfiles'
-export { createSeatColorsSlice, type SeatColorsActions, type SeatColorsSlice, type SeatColorsState, type SetLastGuestColorPayload, type SetProfileOverridePayload } from './redux/seatColorsSlice'
+export { createSeatColorsSlice, type ProfileColorPick, profileSeatColor, type SeatColorsActions, type SeatColorsSlice, type SeatColorsState, type SetLastGuestColorPayload, type SetProfileColorPayload } from './redux/seatColorsSlice'
 export { useSharedProfilesSync, type UseSharedProfilesSyncOptions, type UseSharedProfilesSyncResult } from './redux/useSharedProfilesSync'
 export { avoidSeatColorClash } from './seatColorClash'
 export { isSharedProfileStoreAvailable, loadSharedProfiles, readSharedProfiles, saveSharedProfiles } from './sharedProfileStore'

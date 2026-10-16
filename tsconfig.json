@@ -8,7 +8,10 @@
     // react-native-worklets, @shopify/react-native-skia, etc.) into the type-checked program even
     // when this package never imports them directly. tsc only needs types, so disable the
     // condition here and let it fall through to "types".
-    "customConditions": []
+    // The preset's other condition, react-native-legacy-deep-imports, is kept: it makes React Native
+    // 0.88 resolve its pre-strict types, the fleet's temporary deferral of the strict ones (see
+    // @infinitetoken/tsconfig's TODO.md, and this repo's). Drop it with the preset's before SDK 59.
+    "customConditions": ["react-native-legacy-deep-imports"]
   },
   "include": ["src"],
   "exclude": ["src/__mocks__"]
