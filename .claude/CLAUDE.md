@@ -163,6 +163,10 @@ For Solitaire's Home (Jay: a color swatch beside the profile dropdown didn't rea
 - **`IdentityChip`** (internal, `src/IdentityChip.tsx`): `ProfileChip`'s drawing taking the color as given, shared by `ProfileChip` and the chip trigger. A 3-character tag now draws at 0.32 of the chip instead of 0.4: three wide bold letters (DAD in DejaVu Serif Bold) are a whole chip wide at 0.4, and react-native-web ignores `adjustsFontSizeToFit`, so the web build cut them off ("D..."); `adjustsFontSizeToFit` stays the backstop on native.
 - Tests: `ProfilePicker.test.tsx`'s `colorSection` describe (chip props, null icon, triggerStyle, caret from the measured width, the Color row and its caption above the profile rows with no swatches on the list, the swap to the color page and back, the trigger starting on the list, the profile-color dot (and the check replacing it, none for the null selection), swatches drawn/checked case-insensitively, a press commits the raw color and doesn't close, exact page sizes) and `ProfileChip.test.tsx` (the 0.32 ratio). Seen in Solitaire's web build only (see its CLAUDE.md, "The player button").
 
+## The roster's edge fade (2026-10-16)
+
+`ProfilesManager`'s rows scroll in `@rific/auto-paper`'s `FadingScrollView` (the peer floor, 0.13.0, already has it), so they fade out at an edge while there is more past it, like the Settings sheet, `ProfilePicker`'s rows and `@tastic/hud`'s `BaseStatsScreen` (Jay: every scrolling screen alike). `keyboardShouldPersistTaps` and the hidden indicator pass straight through to its ScrollView. On iOS/Android it only fades when the host hands auto-paper's Provider a `maskedView`; without one the rows just scroll. `ProfilesManager.test.tsx` mocks it as a pass-through and pins it. A color popover that opens over a faded band would fade with it, since it sits inside the scroll content (reasoned, not seen). Unreleased as of this note.
+
 ## Bug fixes (2026-10-15)
 
 Three fixes from the 2026-10-08 fleet audit's follow-ups, found while checking Snake for release. None is published yet.

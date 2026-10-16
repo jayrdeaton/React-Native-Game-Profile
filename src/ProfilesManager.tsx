@@ -1,10 +1,10 @@
-import { defaultColors, useAutoPaperTheme } from '@rific/auto-paper'
+import { defaultColors, FadingScrollView, useAutoPaperTheme } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
 import { useFocusChain } from '@rific/focus-chain'
 import { useToast } from '@rific/toaster'
 import { ConfirmDialog, getInlineColorPickerContentSize, InlineColorPicker, PopoverHost, usePopoverHost } from '@tastic/hud'
 import { ComponentProps, ReactNode, Ref, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { KeyboardAvoidingView, Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Icon, Text, TextInput } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -242,9 +242,11 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
       actually keeps a focused row's own fields scrollable into view above the keyboard instead of
       stuck behind it. keyboardShouldPersistTaps='handled' on the ScrollView below is what lets
       tapping a *different* row (e.g. a color swatch, or another profile entirely) register on the
-      first tap while a field elsewhere is still focused, instead of just dismissing the keyboard. */}
+      first tap while a field elsewhere is still focused, instead of just dismissing the keyboard. The rows
+      fade out at an edge while there is more past it, the same cue as the Settings sheet and the
+      Achievements screen (Jay, 2026-10-16: every scrolling screen alike). */}
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.keyboardAvoiding}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps='handled'>
+        <FadingScrollView style={styles.scrollView} contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps='handled'>
           {rows.map((row) => {
             if (row.kind === 'new') {
               if (editingId !== 'new') {
@@ -283,7 +285,7 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
               </TouchableRipple>
             )
           })}
-        </ScrollView>
+        </FadingScrollView>
       </KeyboardAvoidingView>
 
       {/* hud's ConfirmDialog, the one confirm card every app in the fleet uses, so this reads like the

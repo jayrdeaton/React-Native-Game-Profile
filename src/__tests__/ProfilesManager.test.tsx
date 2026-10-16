@@ -1,4 +1,4 @@
-import { defaultColors, useAutoPaperTheme } from '@rific/auto-paper'
+import { defaultColors, FadingScrollView, useAutoPaperTheme } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
 import { useToast } from '@rific/toaster'
 import { ConfirmDialog, getInlineColorPickerContentSize, InlineColorPicker } from '@tastic/hud'
@@ -28,6 +28,8 @@ jest.mock('../ProfileChip', () => ({
 // one-off '../components/Dialog' mock.
 jest.mock('@rific/auto-paper', () => ({
   useAutoPaperTheme: jest.fn(),
+  // A pass-through, like the react-native mock's ScrollView below.
+  FadingScrollView: jest.fn(({ children }: any) => children ?? null),
   // Only the LENGTH matters here (the swatch popover is sized from it) - 20, like the real default list.
   defaultColors: Array.from({ length: 20 }, (_, i) => ({ name: `color-${i}`, value: `#0000${String(i).padStart(2, '0')}` }))
 }))
@@ -254,6 +256,16 @@ describe('ProfilesManager', () => {
     expect(mockProfileChip.mock.calls.map(([props]) => (props as any).profile.name)).toEqual(['Alice', 'Bob', 'Charlie'])
     expect((mockProfileChip.mock.calls[0][0] as any).size).toBe(40)
     expect(mockTouchableRipple.mock.calls.map(([props]) => flattenText((props as any).children))).toEqual(['Alice', 'Bob', 'Charlie', 'New Profile'])
+  })
+
+  // The Settings sheet's and the Achievements screen's edge fade, so every scrolling screen in the fleet reads the same.
+  it('scrolls its rows in a FadingScrollView that keeps a tap on another row while a field is focused', () => {
+    renderManager({ profiles: [createProfile({ id: 'a', name: 'Alice' })] })
+
+    const props = (FadingScrollView as unknown as jest.Mock).mock.lastCall![0]
+    expect(props.keyboardShouldPersistTaps).toBe('handled')
+    expect(props.showsVerticalScrollIndicator).toBe(false)
+    expect(mockTouchableRipple.mock.calls.map(([rowProps]) => flattenText((rowProps as any).children))).toEqual(['Alice', 'New Profile'])
   })
 
   it('previews swatches through ProfileColorProvider when no colorPreview prop is passed, and lets the prop win', () => {
