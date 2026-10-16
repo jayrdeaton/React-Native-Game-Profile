@@ -245,6 +245,8 @@ export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, sel
     host.toggle(id)
   }
   const triggerLabel = (selectedProfile?.name ?? guestLabel).toUpperCase()
+  // Shown on the list page only (see the footer below).
+  const manageFooter = !!onManage && !(colorSection && colorPage)
 
   return (
     <View style={[styles.anchor, open && styles.anchorOpen]} onLayout={handleAnchorLayout}>
@@ -278,7 +280,7 @@ export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, sel
           ]}
         >
           {/* Keyed by page, so swapping pages starts the new one scrolled to its top. */}
-          <FadingScrollView key={colorSection && colorPage ? 'color' : 'list'} contentContainerStyle={styles.menuContent} showsVerticalScrollIndicator={false}>
+          <FadingScrollView key={colorSection && colorPage ? 'color' : 'list'} contentContainerStyle={[styles.menuContent, manageFooter && styles.menuContentAboveFooter]} showsVerticalScrollIndicator={false}>
             {colorSection && colorPage ? (
               <ColorPage section={colorSection} profileColor={selectedProfile?.color} fg={fg} onBack={() => setColorPage(false)} />
             ) : (
@@ -327,25 +329,27 @@ export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, sel
                     </TouchableRipple>
                   )
                 })}
-
-                {onManage && (
-                  <>
-                    <View style={[styles.divider, { backgroundColor: color }]} />
-                    {/* Tertiary - a navigation action, not another selectable identity in the list above
-                    it, so it reads more like @tastic/hud's SectionedDropdown All/Clear footer button
-                    (centered, bold) than a normal row. The accent is on the icon only: a muted accent
-                    label on the menu's black read dim, almost disabled (2026-10-16). */}
-                    <TouchableRipple onPress={handleManage} style={styles.row}>
-                      <View style={styles.manageRowInner}>
-                        <Icon source='account-cog-outline' size={16} color={color} />
-                        <Text style={[styles.manageLabel, { color: fg }]}>Manage</Text>
-                      </View>
-                    </TouchableRipple>
-                  </>
-                )}
               </>
             )}
           </FadingScrollView>
+          {/* Manage is pinned below the scrolling rows, the way a dialog's Done sits below its rows:
+          always reachable, with the rows fading out above its divider while there are more below
+          (2026-10-16; it used to be the list's last row and scrolled away with it). Tertiary - a
+          navigation action, not another selectable identity in the list above it, so it reads more
+          like @tastic/hud's SectionedDropdown All/Clear footer button (centered, bold) than a normal
+          row. The accent is on the icon only: a muted accent label on the menu's black read dim,
+          almost disabled. Not on the color page, which only has the back row and the swatches. */}
+          {manageFooter && (
+            <View style={styles.menuFooter}>
+              <View style={[styles.divider, { backgroundColor: color }]} />
+              <TouchableRipple onPress={handleManage} style={styles.row}>
+                <View style={styles.manageRowInner}>
+                  <Icon source='account-cog-outline' size={16} color={color} />
+                  <Text style={[styles.manageLabel, { color: fg }]}>Manage</Text>
+                </View>
+              </TouchableRipple>
+            </View>
+          )}
         </View>
       </PopoverBody>
     </View>
@@ -508,6 +512,14 @@ const styles = StyleSheet.create({
   // pill instead of looking clipped against them.
   menuContent: {
     padding: LIST_PADDING
+  },
+  // With Manage pinned below, its own padding takes the bottom edge (same total height as before).
+  menuContentAboveFooter: {
+    paddingBottom: 0
+  },
+  menuFooter: {
+    paddingBottom: LIST_PADDING,
+    paddingHorizontal: LIST_PADDING
   },
   // The selected profile's own color (see ColorSection).
   profileDot: {

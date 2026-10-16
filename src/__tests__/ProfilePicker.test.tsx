@@ -1,4 +1,4 @@
-import { getContrastColor } from '@rific/auto-paper'
+import { FadingScrollView, getContrastColor } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
 import type { PopoverHost } from '@tastic/hud'
 import { PopoverBody, useAutoAlign } from '@tastic/hud'
@@ -274,6 +274,20 @@ describe('ProfilePicker', () => {
       renderPicker({ host: makeHost(TRIGGER_ID) })
       expect(findText('Manage')).toBeUndefined()
       expect(mockTouchableRipple.mock.calls).toHaveLength(5) // trigger + null + 3 profiles, no manage
+    })
+
+    it('is pinned below the scrolling rows, not one of them', () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), onManage: jest.fn() })
+      // Any element tree that renders the Manage label.
+      const rendersManage = (node: unknown): boolean => {
+        if (Array.isArray(node)) return node.some(rendersManage)
+        if (!node || typeof node !== 'object' || !('props' in node)) return false
+        const { type, props } = node as { type: unknown; props: { children?: unknown } }
+        return (type === Text && props.children === 'Manage') || rendersManage(props.children)
+      }
+      const scroller = (FadingScrollView as unknown as jest.Mock).mock.calls[0][0] as { children?: unknown }
+      expect(rendersManage(scroller.children)).toBe(false)
+      expect(findText('Manage')).toBeDefined()
     })
 
     it('draws its label in the plain fg and its icon in the accent', () => {
