@@ -396,11 +396,17 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 20
   },
+  // zIndex: the color popover lives inside this row, and a zIndex only orders siblings of one parent
+  // (React Native Web also gives every positioned view its own stacking context), so the popover's
+  // own zIndex never reached the rows after this one: they were drawn over it (a Kid row and the New
+  // Profile row across the swatches, 2026-10-16). Raising the row lifts the popover with it. There
+  // is only ever one edit row.
   editRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 8,
-    paddingVertical: 6
+    paddingVertical: 6,
+    zIndex: 1
   },
   header: {
     alignItems: 'center',

@@ -99,6 +99,16 @@ describe('ProfileChip', () => {
     expect(textStyle()).toContainEqual(expect.objectContaining({ fontSize: 8 }))
   })
 
+  it('sizes a three-letter tag at a smaller 0.32 ratio, so it fits across the circle', () => {
+    render(<ProfileChip profile={{ ...PROFILE, tag: 'DAD' }} size={25} />)
+    expect(textStyle()).toContainEqual(expect.objectContaining({ fontSize: 8 }))
+  })
+
+  it('keeps the 0.4 ratio for two letters', () => {
+    render(<ProfileChip profile={{ ...PROFILE, tag: 'JD' }} size={20} />)
+    expect(textStyle()).toContainEqual(expect.objectContaining({ fontSize: 8 }))
+  })
+
   it('sizes an emoji tag at a larger 0.6 font-size ratio than plain text gets at the same size', () => {
     render(<ProfileChip profile={{ ...PROFILE, tag: '🎮' }} size={20} />)
     expect(textStyle()).toContainEqual(expect.objectContaining({ fontSize: 12 }))

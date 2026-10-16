@@ -2,13 +2,14 @@ import { getContrastColor } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
 import type { PopoverHost } from '@tastic/hud'
 import { PopoverBody, useAutoAlign } from '@tastic/hud'
-import { render } from '@testing-library/react'
-import { ScrollView, View } from 'react-native'
+import { act, render } from '@testing-library/react'
+import { View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
 
+import { IdentityChip } from '../IdentityChip'
 import { ProfileChip } from '../ProfileChip'
 import { ProfileColorProvider } from '../ProfileColorContext'
-import { getProfilePickerContentSize, ProfilePicker, ProfilePickerAlignResult } from '../ProfilePicker'
+import { getProfilePickerContentSize, ProfilePicker, ProfilePickerAlignResult, ProfilePickerColorSection } from '../ProfilePicker'
 import { Profile } from '../types'
 
 // These three cross-package peers are the real thing everywhere else in this fleet (never
@@ -23,7 +24,10 @@ import { Profile } from '../types'
 // component, not forwardRef) never populates, so `measured` would never flip true and the whole
 // dropdown would stay unrenderable under test.
 jest.mock('@rific/auto-paper', () => ({
-  getContrastColor: jest.fn((color: string) => `contrast(${color})`)
+  getContrastColor: jest.fn((color: string) => `contrast(${color})`),
+  // 20 colors, like the real palette, so the color section's grid is the real 5 x 4.
+  defaultColors: Array.from({ length: 20 }, (_, i) => ({ label: `Color ${i}`, value: `#0000${i.toString(16).padStart(2, '0')}` })),
+  FadingScrollView: jest.fn((props: { children?: unknown }) => props.children ?? null)
 }))
 
 jest.mock('@rific/feedback-press', () => ({
@@ -48,14 +52,19 @@ jest.mock('../ProfileChip', () => ({
   ProfileChip: jest.fn(() => null)
 }))
 
+// Same for the chip trigger's IdentityChip: only the props ProfilePicker hands it matter here.
+jest.mock('../IdentityChip', () => ({
+  IdentityChip: jest.fn(() => null)
+}))
+
 const mockGetContrastColor = getContrastColor as unknown as jest.Mock
 const mockTouchableRipple = TouchableRipple as unknown as jest.Mock
 const mockPopoverBody = PopoverBody as unknown as jest.Mock
 const mockUseAutoAlign = useAutoAlign as unknown as jest.Mock
 const mockProfileChip = ProfileChip as unknown as jest.Mock
+const mockIdentityChip = IdentityChip as unknown as jest.Mock
 const mockIcon = Icon as unknown as jest.Mock
 const mockText = Text as unknown as jest.Mock
-const mockScrollView = ScrollView as unknown as jest.Mock
 const mockView = View as unknown as jest.Mock
 
 const ZOE: Profile = { id: 'zoe', name: 'Zoe', color: '#ff0000', tag: 'Z', createdAt: 3, updatedAt: 3 }
@@ -94,12 +103,14 @@ interface Overrides {
   nullIcon?: string
   onSelect?: (profile: Profile | null) => void
   onManage?: () => void
+  colorSection?: ProfilePickerColorSection
+  triggerStyle?: object
 }
 
 function renderPicker(overrides: Overrides = {}) {
   const host = overrides.host ?? makeHost(null)
   const onSelect = overrides.onSelect ?? jest.fn()
-  const utils = render(<ProfilePicker idPrefix={ID_PREFIX} host={host} profiles={overrides.profiles ?? PROFILES} selectedId={overrides.selectedId ?? null} takenId={overrides.takenId} color={overrides.color ?? '#123456'} dark={overrides.dark ?? false} align={overrides.align} alignOverride={overrides.alignOverride} rotation={overrides.rotation} guestLabel={overrides.guestLabel ?? 'guest'} nullLabel={overrides.nullLabel} nullIcon={overrides.nullIcon} onSelect={onSelect} onManage={overrides.onManage} />, overrides.preview ? { wrapper: ({ children }) => <ProfileColorProvider preview={overrides.preview!}>{children}</ProfileColorProvider> } : undefined)
+  const utils = render(<ProfilePicker idPrefix={ID_PREFIX} host={host} profiles={overrides.profiles ?? PROFILES} selectedId={overrides.selectedId ?? null} takenId={overrides.takenId} color={overrides.color ?? '#123456'} dark={overrides.dark ?? false} align={overrides.align} alignOverride={overrides.alignOverride} rotation={overrides.rotation} guestLabel={overrides.guestLabel ?? 'guest'} nullLabel={overrides.nullLabel} nullIcon={overrides.nullIcon} onSelect={onSelect} onManage={overrides.onManage} colorSection={overrides.colorSection} triggerStyle={overrides.triggerStyle} />, overrides.preview ? { wrapper: ({ children }) => <ProfileColorProvider preview={overrides.preview!}>{children}</ProfileColorProvider> } : undefined)
   return { ...utils, host, onSelect }
 }
 
@@ -111,6 +122,8 @@ const styleOf = (call: unknown) => (call as [{ style?: unknown[] }])[0].style
 // The one View ProfilePicker attaches the trigger ref to - the only `collapsable={false}` View it
 // renders. (React 19 hands `ref` to a function component as an ordinary prop, so the shared View
 // mock sees it in its props.)
+// The menu's box - the one View sized to the popover's width.
+const menuStyle = () => mockView.mock.calls.map((call) => (call[0] as { style?: unknown }).style).find((style) => Array.isArray(style) && style.some((part) => (part as { width?: number })?.width === 220))
 const triggerViewProps = () => mockView.mock.calls.map((call) => call[0] as { collapsable?: boolean; ref?: unknown }).find((props) => props.collapsable === false) as { collapsable?: boolean; ref?: unknown }
 
 beforeEach(() => {
@@ -263,6 +276,12 @@ describe('ProfilePicker', () => {
       expect(mockTouchableRipple.mock.calls).toHaveLength(5) // trigger + null + 3 profiles, no manage
     })
 
+    it('draws its label in the plain fg and its icon in the accent', () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), onManage: jest.fn(), color: '#123456', dark: true })
+      expect(styleOf(mockText.mock.calls.find((call) => textChildrenOf(call) === 'Manage'))).toEqual(expect.arrayContaining([{ color: '#FFFFFF' }]))
+      expect(findIcon('account-cog-outline')?.color).toBe('#123456')
+    })
+
     it('closes the popover, then calls onManage, in that order', () => {
       const onManage = jest.fn()
       const { host } = renderPicker({ host: makeHost(TRIGGER_ID), onManage })
@@ -313,10 +332,9 @@ describe('ProfilePicker', () => {
       expect(mockPopoverBody.mock.calls[0][0]).toMatchObject({ align: 'center', verticalAlign: 'below' })
     })
 
-    it('sizes and colors the menu ScrollView from props and the measured maxHeight', () => {
+    it('sizes and colors the menu box from props and the measured maxHeight', () => {
       renderPicker({ host: makeHost(TRIGGER_ID), color: '#123456', dark: true })
-      const style = styleOf(mockScrollView.mock.calls[0])
-      expect(style).toEqual(expect.arrayContaining([expect.objectContaining({ backgroundColor: '#000000', borderColor: '#123456', width: 220, maxHeight: 400 })]))
+      expect(menuStyle()).toEqual(expect.arrayContaining([expect.objectContaining({ backgroundColor: '#000000', borderColor: '#123456', width: 220, maxHeight: 400 })]))
     })
   })
 
@@ -357,9 +375,9 @@ describe('ProfilePicker', () => {
       expect(mockPopoverBody.mock.calls[0][0]).toMatchObject({ visible: true, align: 'left', verticalAlign: 'above' })
     })
 
-    it("sizes the menu ScrollView's maxHeight from the override", () => {
+    it("sizes the menu box's maxHeight from the override", () => {
       renderPicker({ host: makeHost(TRIGGER_ID), alignOverride: override })
-      expect(styleOf(mockScrollView.mock.calls[0])).toEqual(expect.arrayContaining([expect.objectContaining({ maxHeight: 123 })]))
+      expect(menuStyle()).toEqual(expect.arrayContaining([expect.objectContaining({ maxHeight: 123 })]))
     })
 
     it("gates visibility on the override's own `measured`, not the hook's", () => {
@@ -424,6 +442,191 @@ describe('ProfilePicker', () => {
         const { width, height } = getProfilePickerContentSize(PROFILES.length, hasManage)
         expect(mockUseAutoAlign).toHaveBeenCalledWith(false, width, height, 0)
       }
+    })
+  })
+  describe('colorSection', () => {
+    const SWATCH = (i: number) => `#0000${i.toString(16).padStart(2, '0')}`
+    const section = (overrides: Partial<ProfilePickerColorSection> = {}): ProfilePickerColorSection => ({ value: SWATCH(3), onChange: jest.fn(), ...overrides })
+    const swatchCalls = () => mockTouchableRipple.mock.calls.filter((call) => /^Color \d+(, profile color)?$/.test((call[0] as { accessibilityLabel?: string }).accessibilityLabel ?? ''))
+
+    it("leads the trigger with a chip in the live color and the selected profile's tag", () => {
+      renderPicker({ colorSection: section(), selectedId: AMY.id, color: '#abcdef' })
+      expect(mockIdentityChip).toHaveBeenCalledWith(expect.objectContaining({ color: '#abcdef', tag: 'A', size: 32 }), undefined)
+      expect(textChildrenOf(mockText.mock.calls[0])).toBe('AMY')
+    })
+
+    it('shows the null icon on the chip when nothing is selected', () => {
+      renderPicker({ colorSection: section(), nullIcon: 'incognito' })
+      expect(mockIdentityChip).toHaveBeenCalledWith(expect.objectContaining({ tag: undefined, icon: 'incognito' }), undefined)
+    })
+
+    it("draws the chip trigger's name and chevron in the plain fg, leaving the color to the chip", () => {
+      renderPicker({ colorSection: section(), selectedId: AMY.id, color: '#abcdef', dark: false })
+      expect(styleOf(mockText.mock.calls[0])).toEqual(expect.arrayContaining([{ color: '#000000' }]))
+      expect(findIcon('menu-down')?.color).toBe('#000000')
+    })
+
+    it('has no chip without a color section', () => {
+      renderPicker({ selectedId: AMY.id })
+      expect(mockIdentityChip).not.toHaveBeenCalled()
+    })
+
+    it("applies the host's triggerStyle to the pressable trigger", () => {
+      renderPicker({ colorSection: section(), triggerStyle: { backgroundColor: '#eeeeee' } })
+      expect(styleOf(mockTouchableRipple.mock.calls[0])).toEqual(expect.arrayContaining([{ backgroundColor: '#eeeeee' }]))
+    })
+
+    it('points the caret at the middle of the pill, from its measured width', () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), colorSection: section() })
+      const anchor = mockView.mock.calls.map((call) => call[0] as { onLayout?: (e: unknown) => void }).find((props) => props.onLayout)
+      act(() => anchor!.onLayout!({ nativeEvent: { layout: { width: 180, height: 44 } } }))
+      expect(mockPopoverBody.mock.calls[mockPopoverBody.mock.calls.length - 1][0]).toMatchObject({ triggerSize: 180 })
+    })
+
+    it("keeps the plain trigger's caret where it was", () => {
+      renderPicker({ host: makeHost(TRIGGER_ID) })
+      expect(mockPopoverBody.mock.calls[0][0]).toMatchObject({ triggerSize: 28 })
+    })
+
+    // The Color row on the list page (its label, or "label, caption"), and the color page's back row.
+    const colorRow = () =>
+      mockTouchableRipple.mock.calls
+        .map((call) => call[0] as { accessibilityLabel?: string; onPress?: () => void; style?: unknown[] })
+        .filter((props) => /^(Card )?Color(, .*)?$/.test(props.accessibilityLabel ?? ''))
+        .pop()
+    const backRow = () =>
+      mockTouchableRipple.mock.calls
+        .map((call) => call[0] as { accessibilityLabel?: string; onPress?: () => void })
+        .filter((props) => props.accessibilityLabel === 'Back')
+        .pop()
+    // Opens the color page; the calls recorded from then on are its render.
+    const openColorPage = () => {
+      const row = colorRow()!
+      jest.clearAllMocks()
+      act(() => row.onPress!())
+    }
+    const dotCalls = () => mockView.mock.calls.filter((call) => Array.isArray((call[0] as { style?: unknown }).style) && ((call[0] as { style: unknown[] }).style[0] as { width?: number })?.width === 8)
+
+    it('puts a Color row with its caption above every profile row, and no swatches on the list', () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), colorSection: section({ label: 'Card Color', caption: 'Solitaire only' }) })
+      const texts = mockText.mock.calls.map(textChildrenOf)
+      expect(texts.indexOf('Card Color')).toBeGreaterThan(0)
+      expect(texts.indexOf('Solitaire only')).toBe(texts.indexOf('Card Color') + 1)
+      expect(texts.indexOf('Card Color')).toBeLessThan(texts.indexOf('Player'))
+      expect(colorRow()?.accessibilityLabel).toBe('Card Color, Solitaire only')
+      expect(findIcon('chevron-right')).toBeDefined()
+      expect(swatchCalls()).toHaveLength(0)
+    })
+
+    it('draws the color in effect on the Color row, through previewValue', () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), colorSection: section({ previewValue: (hex) => `muted(${hex})` }) })
+      expect(mockView.mock.calls.some((call) => Array.isArray((call[0] as { style?: unknown }).style) && ((call[0] as { style: unknown[] }).style as object[]).some((part) => (part as { backgroundColor?: string })?.backgroundColor === `muted(${SWATCH(3)})`))).toBe(true)
+    })
+
+    it("defaults the label to 'Color', leaves the caption out, and keeps a plain row's height", () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), colorSection: section() })
+      const texts = mockText.mock.calls.map(textChildrenOf)
+      expect(texts).toContain('Color')
+      expect(texts).toHaveLength(new Set(texts).size)
+      expect(colorRow()?.style).toEqual(expect.arrayContaining([{ height: 36 }]))
+    })
+
+    it('swaps the list for the color page: a back row and the swatches, no profile rows', () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), colorSection: section(), onManage: jest.fn() })
+      openColorPage()
+      const texts = mockText.mock.calls.map(textChildrenOf)
+      expect(texts).toContain('Color')
+      expect(texts).not.toContain('Player')
+      expect(texts).not.toContain('Amy')
+      expect(texts).not.toContain('Manage')
+      expect(backRow()).toBeDefined()
+      expect(findIcon('chevron-left')).toBeDefined()
+      expect(swatchCalls()).toHaveLength(20)
+    })
+
+    it('goes back to the list from the back row', () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), colorSection: section() })
+      openColorPage()
+      const back = backRow()!
+      jest.clearAllMocks()
+      act(() => back.onPress!())
+      expect(mockText.mock.calls.map(textChildrenOf)).toContain('Player')
+      expect(swatchCalls()).toHaveLength(0)
+    })
+
+    it('starts on the list again whenever the trigger is pressed', () => {
+      const { host } = renderPicker({ host: makeHost(TRIGGER_ID), colorSection: section() })
+      openColorPage()
+      const trigger = mockTouchableRipple.mock.calls[0][0] as { onPress: () => void }
+      jest.clearAllMocks()
+      act(() => trigger.onPress())
+      expect(host.toggle).toHaveBeenCalledWith(TRIGGER_ID)
+      expect(mockText.mock.calls.map(textChildrenOf)).toContain('Player')
+      expect(swatchCalls()).toHaveLength(0)
+    })
+
+    it('draws one swatch per color through previewValue and checks the one in effect, ignoring case', () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), colorSection: section({ value: SWATCH(3).toUpperCase(), previewValue: (hex) => `muted(${hex})` }) })
+      openColorPage()
+      const swatches = swatchCalls().map((call) => call[0] as { style?: unknown[]; accessibilityState?: { selected?: boolean } })
+      expect(swatches).toHaveLength(20)
+      expect(swatches[0].style).toEqual(expect.arrayContaining([{ backgroundColor: `muted(${SWATCH(0)})` }]))
+      expect(swatches.map((props) => props.accessibilityState?.selected)).toEqual(Array.from({ length: 20 }, (_, i) => i === 3))
+      expect(findIcon('check')?.color).toBe(`contrast(muted(${SWATCH(3)}))`)
+    })
+
+    it("dots the selected profile's own swatch while another color is in effect", () => {
+      const own = { ...AMY, color: SWATCH(5).toUpperCase() }
+      renderPicker({ host: makeHost(TRIGGER_ID), profiles: [own], selectedId: own.id, colorSection: section({ value: SWATCH(3) }) })
+      openColorPage()
+      const labels = swatchCalls().map((call) => (call[0] as { accessibilityLabel: string }).accessibilityLabel)
+      expect(labels.filter((label) => label.endsWith(', profile color'))).toEqual(['Color 5, profile color'])
+      expect(dotCalls()).toHaveLength(1)
+      expect((dotCalls()[0][0] as { style: unknown[] }).style).toContainEqual({ backgroundColor: `contrast(${SWATCH(5)})` })
+    })
+
+    it("shows the check, not the dot, when the profile's own color is the one in effect", () => {
+      const own = { ...AMY, color: SWATCH(3) }
+      renderPicker({ host: makeHost(TRIGGER_ID), profiles: [own], selectedId: own.id, colorSection: section({ value: SWATCH(3) }) })
+      openColorPage()
+      expect(findIcon('check')).toBeDefined()
+      expect(dotCalls()).toHaveLength(0)
+    })
+
+    it('dots nothing for the null selection', () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), colorSection: section() })
+      openColorPage()
+      expect(
+        swatchCalls()
+          .map((call) => (call[0] as { accessibilityLabel: string }).accessibilityLabel)
+          .filter((label) => label.endsWith(', profile color'))
+      ).toEqual([])
+    })
+
+    it('commits the raw color on a swatch press and leaves the popover open', () => {
+      const onChange = jest.fn()
+      const { host } = renderPicker({ host: makeHost(TRIGGER_ID), colorSection: section({ onChange, previewValue: (hex) => `muted(${hex})` }) })
+      openColorPage()
+      const swatch = swatchCalls()[7]
+      jest.clearAllMocks()
+      act(() => pressOf(swatch)!())
+      expect(onChange).toHaveBeenCalledWith(SWATCH(7))
+      expect(host.close).not.toHaveBeenCalled()
+    })
+
+    it('is sized as the taller page: the list with the Color row and its divider, or the back row and 4 rows of swatches', () => {
+      // List: 8 * 2 + (2 profiles + null + Manage) * 36 + Color row (48 with a caption, 36 without) + divider 9.
+      expect(getProfilePickerContentSize(2, true, { caption: 'Solitaire only' }).height).toBe(16 + 4 * 36 + 48 + 9)
+      expect(getProfilePickerContentSize(2, true, {}).height).toBe(16 + 4 * 36 + 36 + 9)
+      // Color page: 8 * 2 + back row 36 + 4 + (4 * 28 + 3 * 9) + 8 = 203, taller than a short list.
+      expect(getProfilePickerContentSize(0, false, { caption: 'Solitaire only' }).height).toBe(16 + 36 + 4 + 4 * 28 + 3 * 9 + 8)
+    })
+
+    it('hands useAutoAlign the size getProfilePickerContentSize gives for the same section', () => {
+      const colorSection = section({ caption: 'Solitaire only' })
+      renderPicker({ colorSection, onManage: jest.fn() })
+      const { width, height } = getProfilePickerContentSize(PROFILES.length, true, colorSection)
+      expect(mockUseAutoAlign).toHaveBeenCalledWith(false, width, height, 0)
     })
   })
 })

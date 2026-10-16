@@ -1,6 +1,6 @@
 export { ProfileChip } from './ProfileChip'
 export { ProfileColorProvider, useProfileColorPreview, useProfileDisplayColor } from './ProfileColorContext'
-export { getProfilePickerContentSize, ProfilePicker, type ProfilePickerAlignResult, type ProfilePickerContentSize } from './ProfilePicker'
+export { getProfilePickerContentSize, ProfilePicker, type ProfilePickerAlignResult, type ProfilePickerColorSection, type ProfilePickerContentSize } from './ProfilePicker'
 export { type ProfileEditPatch, ProfilesManager, type ProfilesManagerHandle, type ProfilesManagerProps } from './ProfilesManager'
 export { ProfilesScreen, type ProfilesScreenProps } from './ProfilesScreen'
 export { isValidProfile, isValidTag, MAX_PROFILE_NAME_LENGTH, MAX_TAG_LENGTH } from './profilesValidation'

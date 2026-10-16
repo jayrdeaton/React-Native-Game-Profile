@@ -4,6 +4,7 @@ import { useToast } from '@rific/toaster'
 import { ConfirmDialog, getInlineColorPickerContentSize, InlineColorPicker } from '@tastic/hud'
 import { act, render } from '@testing-library/react'
 import { createRef } from 'react'
+import { View } from 'react-native'
 import { Icon, Text, TextInput } from 'react-native-paper'
 
 import { ProfileChip } from '../ProfileChip'
@@ -536,6 +537,23 @@ describe('ProfilesManager', () => {
 
 // A host inside a fake-rotated frame supplies the swatch popover's placement through `useColorPickerAlign` (see its doc on
 // ProfilesManagerProps): hud's own placement measures along the wrong axes there.
+describe('ProfilesManager: edit row stacking', () => {
+  // The color popover renders inside the edit row, so the row itself has to out-stack the rows after
+  // it, or they're drawn over the open swatches (seen in Solitaire, 2026-10-16).
+  it('raises the edit row above the rows after it', () => {
+    const alice = createProfile({ id: 'a', name: 'Alice' })
+    const bob = createProfile({ id: 'b', name: 'Bob' })
+    renderManager({ profiles: [alice, bob] })
+    act(() => findTouchableRippleByText('Alice').onPress())
+
+    const editRow = (View as unknown as jest.Mock).mock.calls
+      .map((call) => call[0] as { style?: unknown; children?: unknown })
+      .filter((props) => findNode(props.children, (n) => n?.type === InlineColorPicker))
+      .pop()
+    expect(editRow?.style).toEqual(expect.objectContaining({ zIndex: 1 }))
+  })
+})
+
 describe('ProfilesManager: useColorPickerAlign', () => {
   const placement = { align: 'left', verticalAlign: 'above', maxHeight: 123, measured: true, triggerRef: { current: null } } as const
   const lastInlineColorPickerProps = (): any => {

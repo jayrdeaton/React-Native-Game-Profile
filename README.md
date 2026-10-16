@@ -51,8 +51,12 @@ see its own doc comment for why that component is generic over your own `Profile
   only - creating, renaming, and deleting all live in `ProfilesManager`. Generic over your own
   `Profile` type (see above). Placement props (all optional, see "Fake-rotated frames" below):
   `align` (force a horizontal side), `alignOverride` (substitute the whole placement result), and
-  `rotation` (forwarded to the automatic measurement). Also exports
-  `getProfilePickerContentSize(profileCount, hasManageRow?)` - the popover's
+  `rotation` (forwarded to the automatic measurement). `colorSection`
+  (`{ value, onChange, previewValue?, swatches?, label?, caption? }`) puts a Color row at the top of
+  the popover that opens a page of swatches (with a back row), and turns the trigger into one
+  button that leads with a chip in `color` with the selected profile's tag; `triggerStyle` styles
+  that button. Also exports
+  `getProfilePickerContentSize(profileCount, hasManageRow?, colorSection?)` - the popover's
   `{ width, height }`, for sizing your own placement hook.
 - **`ProfilesManager`**: the roster screen itself: create/rename/recolor/retag/delete, editing
   inline in the row you tap, with a destructive-delete confirmation. No navigation of its own (no
@@ -142,7 +146,10 @@ const placement = useMyRotatedAlign(open, width, height) // returns a ProfilePic
 
 `getProfilePickerContentSize(profileCount, hasManageRow = false)` returns `{ width, height }`: 220
 wide, and `8 * 2 + (profileCount + 1 + (hasManageRow ? 1 : 0)) * 36` tall (the null/"guest" row, one
-row per profile, and the Manage row when `onManage` is passed).
+row per profile, and the Manage row when `onManage` is passed), or with a color section (pass the same
+object the picker gets) the taller of its two pages: that list plus the Color row (48 with a
+caption, 36 without) and its 9pt divider, or the color page (a 36pt back row and the swatches, 187
+for 20 colors), plus the padding.
 
 
 #### The Profiles screen's color swatch: `useColorPickerAlign`
