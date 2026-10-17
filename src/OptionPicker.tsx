@@ -1,4 +1,4 @@
-import { PopoverHost, PopoverRotation } from '@tastic/hud'
+import type { PopoverHost, PopoverRotation } from '@tastic/hud/chrome'
 import { type StyleProp, type ViewStyle } from 'react-native'
 
 import { IconRow, pickerContentSize, PickerMenu, type ProfilePickerAlignResult, type ProfilePickerColorSection, type ProfilePickerContentSize } from './PickerMenu'

@@ -1,3 +1,5 @@
+import { Platform } from 'react-native'
+
 import { isValidProfile } from './profilesValidation'
 import { Profile } from './types'
 
@@ -9,9 +11,9 @@ interface NativeTasticProfile {
 // Lazily/optionally resolved - this package has no hard dependency on expo-modules-core (it's a
 // peer, provided by whatever Expo app consumes it), and the native module itself only registers on
 // iOS (see ios/TasticProfileModule.swift and expo-module.config.json's "apple"-only platform list).
-// Guarding both the require and the lookup means Android/web, and an iOS build that hasn't run
+// Guarding both the require and the lookup means Android, and an iOS build that hasn't run
 // `expo prebuild` since adding this package yet, both degrade to "sharing unavailable" instead of a
-// hard crash.
+// hard crash. The web has a store of its own, below.
 let native: NativeTasticProfile | null = null
 try {
   const { requireOptionalNativeModule } = require('expo-modules-core')
@@ -22,9 +24,72 @@ try {
 
 const PROFILES_KEY = 'sharedProfiles'
 
+// The App Group's suite and key, flattened into one localStorage key: `<groupId>:sharedProfiles`.
+const webKey = (groupId: string, key: string) => `${groupId}:${key}`
+
+// The web build's stand-in for the native module. Every game in the group is served from one
+// origin (games.infinitetoken.com/<game>/), so they all see the same localStorage, which plays the
+// App Group's part. It has the native module's shape, so readSharedProfiles and saveSharedProfiles
+// below don't change. Null (sharing unavailable, as before) off the web, and when localStorage
+// can't be written at all: touching it can throw (storage blocked, a sandboxed frame), and a store
+// that took every write and kept none would wipe the roster (a save fails silently, the key stays
+// missing, the next read comes back [] and the app is handed that as its roster). So it writes and
+// removes a probe once, at load. After a write that fails anyway (the storage quota), reads fail
+// until a write succeeds again, so an older roster still in storage can't undo a change the app
+// has already made locally.
+const createWebStore = (): { store: NativeTasticProfile; storage: Storage } | null => {
+  if (Platform.OS !== 'web') return null
+  try {
+    const storage = globalThis.localStorage
+    if (!storage) return null
+    const probe = webKey('@tastic/profile', 'probe')
+    storage.setItem(probe, '1')
+    storage.removeItem(probe)
+    let lastWriteFailed = false
+    return {
+      storage,
+      store: {
+        getSharedJSON: async (groupId, key) => {
+          if (lastWriteFailed) throw new Error('The last write to the shared roster failed')
+          return storage.getItem(webKey(groupId, key))
+        },
+        setSharedJSON: async (groupId, key, value) => {
+          try {
+            storage.setItem(webKey(groupId, key), value)
+            lastWriteFailed = false
+          } catch (error) {
+            lastWriteFailed = true
+            throw error
+          }
+        }
+      }
+    }
+  } catch {
+    return null
+  }
+}
+
+const web = native ? null : createWebStore()
+if (web) native = web.store
+
 // True once at module load - a consuming app uses this to decide whether to fall back to its own
 // local-only storage for the base roster too (see this package's README's App Group section).
 export const isSharedProfileStoreAvailable = native !== null
+
+// A stored roster's JSON as profiles: [] for nothing stored, null for a blob that isn't a readable
+// roster (not JSON, not an array, or entries none of which are valid). Entries that fail
+// isValidProfile are dropped individually rather than invalidating the whole roster.
+const parseRoster = (json: string | null): Profile[] | null => {
+  if (!json) return []
+  try {
+    const parsed: unknown = JSON.parse(json)
+    if (!Array.isArray(parsed)) return null
+    const profiles = parsed.filter(isValidProfile)
+    return parsed.length > 0 && profiles.length === 0 ? null : profiles
+  } catch {
+    return null
+  }
+}
 
 // Reads the shared base-identity roster out of a given App Group suite, telling a failed read
 // apart from an empty roster. Resolves to [] when nothing has been shared yet (a missing/empty
@@ -47,15 +112,7 @@ export async function readSharedProfiles(groupId: string): Promise<Profile[] | n
   } catch {
     return null
   }
-  if (!json) return []
-  try {
-    const parsed: unknown = JSON.parse(json)
-    if (!Array.isArray(parsed)) return null
-    const profiles = parsed.filter(isValidProfile)
-    return parsed.length > 0 && profiles.length === 0 ? null : profiles
-  } catch {
-    return null
-  }
+  return parseRoster(json)
 }
 
 // readSharedProfiles with a failed read flattened to []: always resolves to an array, never
@@ -77,4 +134,23 @@ export async function saveSharedProfiles(groupId: string, profiles: Profile[]): 
   } catch {
     // Best-effort - see doc comment above.
   }
+}
+
+// Calls `listener` with the roster another tab or game on this origin has just saved (the
+// browser's `storage` event, which never fires in the tab that wrote). The same parse as
+// readSharedProfiles; a roster that can't be read is skipped, and so is the key's removal (or a
+// whole-storage clear), so neither can spread a wipe. Returns the unsubscribe. Does nothing on
+// native, where the App Group has no change notification (useSharedProfilesSync re-reads when the
+// app comes back to the foreground instead), and on the web when the store isn't available.
+export function subscribeSharedProfiles(groupId: string, listener: (profiles: Profile[]) => void): () => void {
+  if (!web || typeof window === 'undefined' || typeof window.addEventListener !== 'function') return () => {}
+  const storageKey = webKey(groupId, PROFILES_KEY)
+  const storage = web.storage
+  const onStorage = (event: StorageEvent) => {
+    if (event.key !== storageKey || event.storageArea !== storage || !event.newValue) return
+    const profiles = parseRoster(event.newValue)
+    if (profiles !== null) listener(profiles)
+  }
+  window.addEventListener('storage', onStorage)
+  return () => window.removeEventListener('storage', onStorage)
 }

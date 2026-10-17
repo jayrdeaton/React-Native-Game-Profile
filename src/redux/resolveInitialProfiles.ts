@@ -7,8 +7,9 @@ import { Profile } from '../types'
 // hand-rolled an identical version of this exact decision inline in its own useProfiles.tsx; this
 // is that logic, extracted verbatim.
 //
-// - Shared store unavailable (Android/web, or an iOS build that hasn't run `expo prebuild` since
-//   the entitlement was added): `localFallback` IS the roster, verbatim.
+// - Shared store unavailable (Android, a web page that can't write localStorage, or an iOS build
+//   that hasn't run `expo prebuild` since the entitlement was added): `localFallback` IS the
+//   roster, verbatim.
 // - Shared store available, but its roster couldn't be read (readSharedProfiles' null):
 //   `localFallback`, and nothing is written. Seeding here would overwrite every other app's
 //   profiles with this app's local snapshot.

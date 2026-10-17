@@ -1,7 +1,7 @@
 import { defaultColors, FadingScrollView, useAutoPaperTheme } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
 import { useToast } from '@rific/toaster'
-import { ConfirmDialog, getInlineColorPickerContentSize, InlineColorPicker } from '@tastic/hud'
+import { ConfirmDialog, getInlineColorPickerContentSize, InlineColorPicker } from '@tastic/hud/chrome'
 import { act, render } from '@testing-library/react'
 import { createRef } from 'react'
 import { View } from 'react-native'
@@ -42,7 +42,7 @@ jest.mock('@rific/toaster', () => ({
   useToast: jest.fn()
 }))
 
-jest.mock('@tastic/hud', () => {
+jest.mock('@tastic/hud/chrome', () => {
   // jest.mock factories can't close over module-level imports (hoisted above them), hence its own
   // require - cast to the real module type so the generics below still typecheck (a bare require()
   // types as `any`, and TS rejects explicit type arguments on an untyped call).
@@ -55,8 +55,8 @@ jest.mock('@tastic/hud', () => {
     // handed: (swatchCount, windowWidth) -> { width, height }.
     getInlineColorPickerContentSize: jest.fn((swatchCount: number, windowWidth: number) => ({ width: 100 + swatchCount, height: 10 + windowWidth })),
     // A faithful, self-contained reimplementation of the real hook (see @tastic/hud's own
-    // usePopoverHost.ts) - not jest.requireActual('@tastic/hud'), which would also eagerly
-    // evaluate every other module its index.ts re-exports. Needs to be genuinely stateful (not a
+    // usePopoverHost.ts) - not jest.requireActual('@tastic/hud/chrome'), which would also eagerly
+    // evaluate every other module the chrome entry re-exports. Needs to be genuinely stateful (not a
     // static { openId: null, ... } stub) so the focus-follows-open tests below can drive
     // host.openId through a real open/close transition.
     usePopoverHost: jest.fn(() => {

@@ -213,3 +213,122 @@ describe('sharedProfileStore - native module available', () => {
     await expect(store.saveSharedProfiles(GROUP_ID, [VALID_PROFILE])).resolves.toBeUndefined()
   })
 })
+
+// The web build's store: every game in the group is served from one origin, so localStorage plays the
+// App Group's part. Platform.OS is set on the fresh react-native mock that resetModules hands the store.
+describe('sharedProfileStore - web', () => {
+  const STORAGE_KEY = `${GROUP_ID}:sharedProfiles`
+
+  const loadWebStore = (os: 'web' | 'ios' = 'web') => {
+    require('react-native').Platform.OS = os
+    return require('../sharedProfileStore')
+  }
+
+  beforeEach(() => {
+    jest.resetModules()
+    jest.doMock('expo-modules-core', () => ({
+      requireOptionalNativeModule: jest.fn(() => null)
+    }))
+    localStorage.clear()
+  })
+
+  afterEach(() => {
+    jest.dontMock('expo-modules-core')
+    jest.restoreAllMocks()
+  })
+
+  it('is available on the web and stores the roster under the group id', async () => {
+    const store = loadWebStore()
+    expect(store.isSharedProfileStoreAvailable).toBe(true)
+    await store.saveSharedProfiles(GROUP_ID, [VALID_PROFILE, OTHER_VALID_PROFILE])
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')).toEqual([VALID_PROFILE, OTHER_VALID_PROFILE])
+    await expect(store.readSharedProfiles(GROUP_ID)).resolves.toEqual([VALID_PROFILE, OTHER_VALID_PROFILE])
+  })
+
+  it('reads [] when nothing has been shared and null for a blob that is not a roster', async () => {
+    const store = loadWebStore()
+    await expect(store.readSharedProfiles(GROUP_ID)).resolves.toEqual([])
+    localStorage.setItem(STORAGE_KEY, '{not json')
+    await expect(store.readSharedProfiles(GROUP_ID)).resolves.toBeNull()
+  })
+
+  it('stays unavailable off the web when there is no native module', () => {
+    expect(loadWebStore('ios').isSharedProfileStoreAvailable).toBe(false)
+  })
+
+  it('stays unavailable when touching localStorage throws (storage blocked)', () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new Error('SecurityError')
+      }
+    })
+    try {
+      expect(loadWebStore().isSharedProfileStoreAvailable).toBe(false)
+    } finally {
+      if (original) Object.defineProperty(globalThis, 'localStorage', original)
+      else delete (globalThis as { localStorage?: Storage }).localStorage
+    }
+  })
+
+  it('stays unavailable when localStorage takes no writes, so a save can never silently wipe the roster', () => {
+    jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    expect(loadWebStore().isSharedProfileStoreAvailable).toBe(false)
+  })
+
+  it('fails reads after a failed write, until a write succeeds, so an older roster cannot undo a local change', async () => {
+    const store = loadWebStore()
+    await store.saveSharedProfiles(GROUP_ID, [VALID_PROFILE])
+
+    const setItem = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    await expect(store.saveSharedProfiles(GROUP_ID, [VALID_PROFILE, OTHER_VALID_PROFILE])).resolves.toBeUndefined()
+    await expect(store.readSharedProfiles(GROUP_ID)).resolves.toBeNull()
+
+    setItem.mockRestore()
+    await store.saveSharedProfiles(GROUP_ID, [OTHER_VALID_PROFILE])
+    await expect(store.readSharedProfiles(GROUP_ID)).resolves.toEqual([OTHER_VALID_PROFILE])
+  })
+
+  describe('subscribeSharedProfiles', () => {
+    const storageEvent = (init: StorageEventInit) => window.dispatchEvent(new StorageEvent('storage', { storageArea: localStorage, ...init }))
+
+    it('hands the listener the roster another tab saved, until unsubscribed', () => {
+      const store = loadWebStore()
+      const listener = jest.fn()
+      const unsubscribe = store.subscribeSharedProfiles(GROUP_ID, listener)
+
+      storageEvent({ key: STORAGE_KEY, newValue: JSON.stringify([VALID_PROFILE]) })
+      expect(listener).toHaveBeenCalledWith([VALID_PROFILE])
+
+      unsubscribe()
+      storageEvent({ key: STORAGE_KEY, newValue: JSON.stringify([OTHER_VALID_PROFILE]) })
+      expect(listener).toHaveBeenCalledTimes(1)
+    })
+
+    it("ignores another key, the key's removal, a clear, and a blob that is not a roster", () => {
+      const store = loadWebStore()
+      const listener = jest.fn()
+      store.subscribeSharedProfiles(GROUP_ID, listener)
+
+      storageEvent({ key: 'snake:root', newValue: '{}' })
+      storageEvent({ key: STORAGE_KEY, newValue: null })
+      storageEvent({ key: null, newValue: null })
+      storageEvent({ key: STORAGE_KEY, newValue: '{not json' })
+      expect(listener).not.toHaveBeenCalled()
+    })
+
+    it('does nothing when the store is not the web one', () => {
+      const store = loadWebStore('ios')
+      const listener = jest.fn()
+      const unsubscribe = store.subscribeSharedProfiles(GROUP_ID, listener)
+      storageEvent({ key: STORAGE_KEY, newValue: JSON.stringify([VALID_PROFILE]) })
+      expect(listener).not.toHaveBeenCalled()
+      expect(unsubscribe).not.toThrow()
+    })
+  })
+})

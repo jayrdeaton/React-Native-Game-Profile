@@ -7,7 +7,8 @@ import { Profile } from '../types'
 jest.mock('../sharedProfileStore', () => ({
   isSharedProfileStoreAvailable: true,
   readSharedProfiles: jest.fn(),
-  saveSharedProfiles: jest.fn()
+  saveSharedProfiles: jest.fn(),
+  subscribeSharedProfiles: jest.fn(() => jest.fn())
 }))
 
 // A single mocked module instance for the whole file (not re-required per test) - toggling
@@ -23,8 +24,12 @@ const mockedStore = jest.requireMock('../sharedProfileStore') as {
   isSharedProfileStoreAvailable: boolean
   readSharedProfiles: jest.Mock
   saveSharedProfiles: jest.Mock
+  subscribeSharedProfiles: jest.Mock
 }
-const { readSharedProfiles, saveSharedProfiles } = mockedStore
+const { readSharedProfiles, saveSharedProfiles, subscribeSharedProfiles } = mockedStore
+
+// The listener the hook last handed subscribeSharedProfiles (the web's storage event).
+const deliverRemoteSave = (profiles: Profile[]) => act(() => (subscribeSharedProfiles.mock.calls[subscribeSharedProfiles.mock.calls.length - 1][1] as (p: Profile[]) => void)(profiles))
 
 const GROUP_ID = 'group.tastic.profile'
 const ALICE: Profile = { color: '#2196f3', createdAt: 1000, id: 'profile-1', name: 'Alice', tag: '😎', updatedAt: 1000 }
@@ -159,6 +164,43 @@ describe('useSharedProfilesSync - shared store available', () => {
   })
 })
 
+describe('useSharedProfilesSync - another tab or game saving the roster (web)', () => {
+  it('subscribes on mount and unsubscribes on unmount', () => {
+    const unsubscribe = jest.fn()
+    subscribeSharedProfiles.mockReturnValueOnce(unsubscribe)
+    const { unmount } = renderHook(() => useSharedProfilesSync({ groupId: GROUP_ID, onRemoteChange: jest.fn() }))
+    expect(subscribeSharedProfiles).toHaveBeenCalledWith(GROUP_ID, expect.any(Function))
+    unmount()
+    expect(unsubscribe).toHaveBeenCalled()
+  })
+
+  it('hands a remote save to the latest onRemoteChange', () => {
+    const first = jest.fn()
+    const second = jest.fn()
+    const { rerender } = renderHook(({ onRemoteChange }) => useSharedProfilesSync({ groupId: GROUP_ID, onRemoteChange }), { initialProps: { onRemoteChange: first } })
+    rerender({ onRemoteChange: second })
+    deliverRemoteSave([ALICE])
+    expect(first).not.toHaveBeenCalled()
+    expect(second).toHaveBeenCalledWith([ALICE])
+  })
+
+  it('skips a remote save while its own write is still in flight', async () => {
+    let resolveWrite: () => void = () => {}
+    saveSharedProfiles.mockReturnValue(new Promise<void>((resolve) => (resolveWrite = resolve)))
+    const onRemoteChange = jest.fn()
+    const { result } = renderHook(() => useSharedProfilesSync({ groupId: GROUP_ID, onRemoteChange }))
+    act(() => {
+      result.current.syncToShared([ALICE])
+    })
+    deliverRemoteSave([])
+    expect(onRemoteChange).not.toHaveBeenCalled()
+    await act(async () => {
+      resolveWrite()
+      await Promise.resolve()
+    })
+  })
+})
+
 describe('useSharedProfilesSync - shared store unavailable', () => {
   beforeEach(() => {
     mockedStore.isSharedProfileStoreAvailable = false
@@ -168,9 +210,10 @@ describe('useSharedProfilesSync - shared store unavailable', () => {
     mockedStore.isSharedProfileStoreAvailable = true
   })
 
-  it('never subscribes to AppState', () => {
+  it('never subscribes to AppState or to remote saves', () => {
     renderHook(() => useSharedProfilesSync({ groupId: GROUP_ID, onRemoteChange: jest.fn() }))
     expect(mockAddEventListener).not.toHaveBeenCalled()
+    expect(subscribeSharedProfiles).not.toHaveBeenCalled()
   })
 
   it('syncToShared is a no-op', () => {

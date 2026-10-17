@@ -1,11 +1,14 @@
 import { defaultColors, FadingScrollView, getContrastColor, type SeedColor } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
-import { PopoverBody, PopoverHost, PopoverRotation, useAutoAlign } from '@tastic/hud'
+import type { PopoverHost, PopoverRotation } from '@tastic/hud/chrome'
+import { PopoverBody, useAutoAlign } from '@tastic/hud/chrome'
 import { ReactNode, RefObject, useState } from 'react'
 import { type LayoutChangeEvent, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
 
 import { IdentityChip } from './IdentityChip'
+import { useProfileSwatchRenderer } from './ProfileColorContext'
+import { SwatchLayer } from './SwatchLayer'
 
 // The trigger and popover ProfilePicker and OptionPicker share: a name trigger (or the chip pill),
 // a bordered menu of rows, and with a `colorSection` a Color row that swaps the menu for a page of
@@ -29,6 +32,10 @@ const CHIP_TRIGGER_PADDING = 6
 // 20 colors fill 4 full rows), with the same spacing between rows.
 const SWATCH_SIZE = 28
 const SWATCH_MIN_GAP = 6
+// The selected swatch's white ring, drawn inside its SWATCH_SIZE.
+const SWATCH_RING_WIDTH = 2
+// The Color row's swatch of the color in effect, in the same 22pt slot as every row's chip.
+const COLOR_ROW_SWATCH_SIZE = 22
 // The Color row: a plain row's height, or taller with a caption line under the label.
 const COLOR_ROW_CAPTIONED_HEIGHT = 48
 const COLOR_LABEL_LINE = 18
@@ -260,12 +267,14 @@ export function IconRow({ icon, label, selected, color, fg, disabled = false, on
 // to the color page. A divider sets it apart from the selectable rows under it.
 function ColorRow({ section, fg, dividerColor, onPress }: { section: ProfilePickerColorSection; fg: string; dividerColor: string; onPress: () => void }) {
   const { value, previewValue, label = 'Color', caption } = section
+  const renderSwatch = useProfileSwatchRenderer()
   const drawn = previewValue ? previewValue(value) : value
   return (
     <>
       <TouchableRipple onPress={onPress} style={[pickerMenuStyles.row, { height: colorRowHeight(caption) }]} accessibilityRole='button' accessibilityLabel={caption ? `${label}, ${caption}` : label}>
         <View style={pickerMenuStyles.rowInner}>
-          <View style={[styles.colorRowSwatch, { backgroundColor: drawn }]} />
+          {/* A ProfileColorProvider renderSwatch draws it in place of the flat fill. */}
+          <View style={[styles.colorRowSwatch, !renderSwatch && { backgroundColor: drawn }]}>{renderSwatch && <SwatchLayer render={renderSwatch} color={drawn} size={COLOR_ROW_SWATCH_SIZE} />}</View>
           <View style={styles.colorRowText}>
             <Text style={[styles.colorRowLabel, { color: fg }]} numberOfLines={1}>
               {label}
@@ -289,9 +298,12 @@ function ColorRow({ section, fg, dividerColor, onPress }: { section: ProfilePick
 // back to it (the profile's row shows that color, but matching it to one of two similar swatches by
 // eye is guesswork). The check takes the dot's place on the swatch in effect, so the dot only shows
 // while the color in effect is another one. Another seat's color (`takenValue`) is marked with an X
-// and disabled, or a swap icon when `allowSwapTaken` lets it be picked.
+// and disabled, or a swap icon when `allowSwapTaken` lets it be picked. A ProfileColorProvider
+// `renderSwatch` draws each swatch in place of its flat fill (inside the selected one's ring), with
+// the mark's contrast still taken from the swatch's own color.
 function ColorPage({ section, homeColor, fg, onBack }: { section: ProfilePickerColorSection; homeColor?: string; fg: string; onBack: () => void }) {
   const { value, onChange, previewValue, swatches = defaultColors, label = 'Color', takenValue, allowSwapTaken } = section
+  const renderSwatch = useProfileSwatchRenderer()
   const displayFor = previewValue ?? ((hex: string) => hex)
   return (
     <>
@@ -314,11 +326,20 @@ function ColorPage({ section, homeColor, fg, onBack }: { section: ProfilePickerC
           const swatchDisplay = displayFor(swatch.value)
           const contrast = getContrastColor(swatchDisplay)
           const accessibilityLabel = swappable ? `${swatch.label}, swap` : taken ? `${swatch.label}, taken` : isHomeColor ? `${swatch.label}, profile color` : swatch.label
+          const mark = selected ? <Icon source='check' size={16} color={contrast} /> : swappable ? <Icon source='swap-horizontal' size={16} color={contrast} /> : taken ? <Icon source='close' size={16} color={contrast} /> : isHomeColor ? <View style={[styles.homeDot, { backgroundColor: contrast }]} /> : <View />
           // The same swatch as @tastic/hud's InlineColorPicker: a filled circle, the selected one
-          // ringed and checked, a taken one faded with an X.
+          // ringed and checked, a taken one faded with an X. TouchableRipple takes one child, so a
+          // drawn swatch and its mark share a face that fills the circle inside the ring.
           return (
-            <TouchableRipple key={swatch.value} disabled={taken && !swappable} onPress={() => onChange(swatch.value)} borderless style={[styles.swatch, { backgroundColor: swatchDisplay }, selected && styles.swatchSelected, taken && !swappable && styles.swatchTaken]} accessibilityRole='button' accessibilityLabel={accessibilityLabel} accessibilityState={{ selected, disabled: taken && !swappable }}>
-              {selected ? <Icon source='check' size={16} color={contrast} /> : swappable ? <Icon source='swap-horizontal' size={16} color={contrast} /> : taken ? <Icon source='close' size={16} color={contrast} /> : isHomeColor ? <View style={[styles.homeDot, { backgroundColor: contrast }]} /> : <View />}
+            <TouchableRipple key={swatch.value} disabled={taken && !swappable} onPress={() => onChange(swatch.value)} borderless style={[styles.swatch, !renderSwatch && { backgroundColor: swatchDisplay }, selected && styles.swatchSelected, taken && !swappable && styles.swatchTaken]} accessibilityRole='button' accessibilityLabel={accessibilityLabel} accessibilityState={{ selected, disabled: taken && !swappable }}>
+              {renderSwatch ? (
+                <View style={styles.swatchFace}>
+                  <SwatchLayer render={renderSwatch} color={swatchDisplay} size={selected ? SWATCH_SIZE - 2 * SWATCH_RING_WIDTH : SWATCH_SIZE} />
+                  {mark}
+                </View>
+              ) : (
+                mark
+              )}
             </TouchableRipple>
           )
         })}
@@ -385,9 +406,9 @@ const styles = StyleSheet.create({
   },
   // The color in effect, in the same 22pt slot as every row's chip.
   colorRowSwatch: {
-    borderRadius: 11,
-    height: 22,
-    width: 22
+    borderRadius: COLOR_ROW_SWATCH_SIZE / 2,
+    height: COLOR_ROW_SWATCH_SIZE,
+    width: COLOR_ROW_SWATCH_SIZE
   },
   colorRowText: {
     flex: 1
@@ -447,9 +468,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: SWATCH_SIZE
   },
+  // A drawn swatch (see ColorPage) and its mark: the whole circle inside the selected one's ring.
+  swatchFace: {
+    alignItems: 'center',
+    bottom: 0,
+    justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0
+  },
   swatchSelected: {
     borderColor: '#ffffff',
-    borderWidth: 2
+    borderWidth: SWATCH_RING_WIDTH
   },
   swatchTaken: {
     opacity: 0.35

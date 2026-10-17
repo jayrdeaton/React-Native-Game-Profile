@@ -10,8 +10,9 @@ jest.mock('@rific/auto-paper', () => ({
 
 import { getContrastColor } from '@rific/auto-paper'
 
+import { IdentityChip } from '../IdentityChip'
 import { ProfileChip } from '../ProfileChip'
-import { ProfileColorProvider } from '../ProfileColorContext'
+import { ProfileColorProvider, useProfileColorPreview, useProfileSwatchRenderer } from '../ProfileColorContext'
 
 const mockView = View as unknown as jest.Mock
 const mockIcon = Icon as jest.MockedFunction<typeof Icon>
@@ -136,5 +137,91 @@ describe('ProfileChip', () => {
     render(<ProfileChip profile={{ ...PROFILE, tag: '', color: '#ffffff' }} />)
     expect(mockGetContrastColor).toHaveBeenCalledWith('#ffffff')
     expect(mockIcon.mock.calls[0][0].color).toBe('#000000')
+  })
+
+  describe("ProfileColorProvider's renderSwatch", () => {
+    // Stands in for a host's drawing (Hangman's pie of the color's triad); its calls are what was drawn.
+    const renderSwatch = jest.fn((_color: string, _size: number) => null)
+    // The clip SwatchLayer draws it in: the second View, after the chip's own.
+    const layerProps = () => mockView.mock.calls[1]?.[0] as { style: object[]; children?: unknown } | undefined
+
+    it('draws the fill in place of the flat color, clipped to the circle, behind the tag', () => {
+      render(
+        <ProfileColorProvider renderSwatch={renderSwatch}>
+          <ProfileChip profile={{ ...PROFILE, color: '#2196f3', tag: 'J' }} size={30} />
+        </ProfileColorProvider>
+      )
+      expect(chipStyle()).not.toContainEqual({ backgroundColor: '#2196f3' })
+      expect(renderSwatch).toHaveBeenCalledTimes(1)
+      expect(renderSwatch).toHaveBeenCalledWith('#2196f3', 30)
+      expect(layerProps()?.style).toEqual(expect.arrayContaining([expect.objectContaining({ position: 'absolute', overflow: 'hidden', top: 0, left: 0 }), { borderRadius: 15, height: 30, width: 30 }]))
+      // The tag is still drawn on top, with its contrast taken from the primary color.
+      expect(mockText.mock.calls[0][0].children).toBe('J')
+      expect(mockGetContrastColor).toHaveBeenCalledWith('#2196f3')
+    })
+
+    it("hands it preview's drawn color, and the contrast follows that color", () => {
+      render(
+        <ProfileColorProvider preview={() => '#000000'} renderSwatch={renderSwatch}>
+          <ProfileChip profile={{ ...PROFILE, color: '#2196f3', tag: 'J' }} />
+        </ProfileColorProvider>
+      )
+      expect(renderSwatch).toHaveBeenCalledWith('#000000', 22)
+      expect(textStyle()).toContainEqual(expect.objectContaining({ color: '#ffffff' }))
+    })
+
+    it('draws nothing for an unfilled chip', () => {
+      render(
+        <ProfileColorProvider renderSwatch={renderSwatch}>
+          <ProfileChip profile={{ ...PROFILE, color: '#2196f3' }} filled={false} />
+        </ProfileColorProvider>
+      )
+      expect(renderSwatch).not.toHaveBeenCalled()
+      expect(mockView).toHaveBeenCalledTimes(1)
+    })
+
+    it("draws the pickers' chip trigger (IdentityChip with an icon) the same way", () => {
+      render(
+        <ProfileColorProvider renderSwatch={renderSwatch}>
+          <IdentityChip color='#ffffff' icon='robot' size={32} />
+        </ProfileColorProvider>
+      )
+      expect(renderSwatch).toHaveBeenCalledWith('#ffffff', 32)
+      expect(mockIcon.mock.calls[0][0]).toMatchObject({ source: 'robot', color: '#000000' })
+    })
+
+    it('leaves colors as saved when it is the only prop, and the hooks report what was given', () => {
+      const seen: { preview?: unknown; renderSwatch?: unknown } = {}
+      function Probe() {
+        seen.preview = useProfileColorPreview()
+        seen.renderSwatch = useProfileSwatchRenderer()
+        return null
+      }
+      render(
+        <ProfileColorProvider renderSwatch={renderSwatch}>
+          <ProfileChip profile={{ ...PROFILE, color: '#2196f3' }} />
+          <Probe />
+        </ProfileColorProvider>
+      )
+      expect(renderSwatch).toHaveBeenCalledWith('#2196f3', 22)
+      expect(seen).toEqual({ preview: undefined, renderSwatch })
+    })
+
+    it('is undefined without a provider, and the chip keeps its flat fill', () => {
+      let seen: unknown = 'unset'
+      function Probe() {
+        seen = useProfileSwatchRenderer()
+        return null
+      }
+      render(
+        <>
+          <ProfileChip profile={{ ...PROFILE, color: '#2196f3' }} />
+          <Probe />
+        </>
+      )
+      expect(seen).toBeUndefined()
+      expect(chipStyle()).toContainEqual({ backgroundColor: '#2196f3' })
+      expect(mockView).toHaveBeenCalledTimes(1)
+    })
   })
 })

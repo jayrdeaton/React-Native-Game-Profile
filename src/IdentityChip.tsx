@@ -2,6 +2,9 @@ import { getContrastColor } from '@rific/auto-paper'
 import { StyleSheet, View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
 
+import { useProfileSwatchRenderer } from './ProfileColorContext'
+import { SwatchLayer } from './SwatchLayer'
+
 // Presence check, not isValidTag's own full-string emoji validation (profilesValidation.ts) - this
 // only decides a font-size ratio, so it doesn't need that check's ZWJ/variation-selector precision,
 // just "does this tag contain a pictograph at all."
@@ -21,8 +24,10 @@ interface Props {
 
 // A filled circle with a tag (or an icon) in a contrast-safe color on top: the drawing behind
 // ProfileChip (a profile's own colors) and ProfilePicker's chip trigger (the live color in effect,
-// which may not be any profile's saved one).
+// which may not be any profile's saved one). A ProfileColorProvider `renderSwatch` draws the fill in
+// place of the flat color (a filled chip only); the tag's contrast still comes from `color`.
 export function IdentityChip({ color, tag, icon, size, filled = true }: Props) {
+  const renderSwatch = useProfileSwatchRenderer()
   const contrastColor = getContrastColor(color)
   // An emoji glyph reads visually smaller than a bold letter at the same fontSize (the system emoji
   // font leaves more of its own em-box empty), so a plain-text ratio that looks right for "J" still
@@ -34,7 +39,8 @@ export function IdentityChip({ color, tag, icon, size, filled = true }: Props) {
   // them off there ("D..."); 0.32 fits them, with adjustsFontSizeToFit still the backstop on native.
   const tagFontSize = size * (tag && EMOJI_PATTERN.test(tag) ? 0.6 : tag && Array.from(tag).length >= 3 ? 0.32 : 0.4)
   return (
-    <View style={[styles.chip, { borderRadius: size / 2, height: size, width: size }, filled && { backgroundColor: color }]}>
+    <View style={[styles.chip, { borderRadius: size / 2, height: size, width: size }, filled && !renderSwatch && { backgroundColor: color }]}>
+      {filled && renderSwatch && <SwatchLayer render={renderSwatch} color={color} size={size} />}
       {tag ? (
         <Text style={[styles.tag, { color: contrastColor, fontSize: tagFontSize }]} numberOfLines={1} adjustsFontSizeToFit>
           {tag}

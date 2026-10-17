@@ -1,6 +1,6 @@
 import { getContrastColor } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
-import { PopoverHost, PopoverRotation } from '@tastic/hud'
+import type { PopoverHost, PopoverRotation } from '@tastic/hud/chrome'
 import { useMemo } from 'react'
 import { type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
@@ -42,6 +42,10 @@ interface ProfilePickerProps<P extends Profile> {
   // game, where double-selecting one profile would double-count its stats as both winner and
   // loser) - omit if that doesn't apply.
   takenId?: string | null
+  // Every other seat's profile id, for a lobby with more than two seats: each is disabled in this
+  // list the same way as `takenId` (both may be given). This picker's own selection is never taken,
+  // so a host can pass every seated id, this seat's included.
+  takenIds?: readonly string[]
   // Tint for the trigger's own label/icon - pass the seat/context's current live color so the
   // trigger reads as one identity with whatever it's paired with.
   color: string
@@ -116,7 +120,7 @@ interface ProfilePickerProps<P extends Profile> {
 // it keeps this popover from needing its own destructive-delete confirmation. Fully prop-driven -
 // no internal profile-storage access of its own, so the host app stays the one place that reads
 // its own persistence hook.
-export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, selectedId, takenId, color, dark, align, alignOverride, rotation = 0, guestLabel, nullLabel = 'Player', nullIcon = 'account-off-outline', onSelect, onManage, colorSection, triggerStyle }: ProfilePickerProps<P>) {
+export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, selectedId, takenId, takenIds, color, dark, align, alignOverride, rotation = 0, guestLabel, nullLabel = 'Player', nullIcon = 'account-off-outline', onSelect, onManage, colorSection, triggerStyle }: ProfilePickerProps<P>) {
   const id = `${idPrefix}-profile`
   // A selected row fills with the profile's drawn color, the same one its ProfileChip would show.
   const colorPreview = useProfileColorPreview()
@@ -128,6 +132,8 @@ export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, sel
   const sortedProfiles = useMemo(() => [...profiles].sort((a, b) => a.name.localeCompare(b.name)), [profiles])
   // Null row + each saved profile + (if passed) the manage row.
   const contentSize = getProfilePickerContentSize(profiles.length, !!onManage, colorSection)
+  // `takenId` exactly as before; a `takenIds` entry skips this picker's own selection.
+  const isTaken = (profileId: string) => profileId === takenId || (profileId !== selectedId && !!takenIds?.includes(profileId))
 
   const handleSelectGuest = () => {
     onSelect(null)
@@ -135,7 +141,7 @@ export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, sel
   }
 
   const handleSelectExisting = (profile: P) => {
-    if (profile.id === takenId) return
+    if (isTaken(profile.id)) return
     onSelect(profile)
     host.close()
   }
@@ -165,7 +171,7 @@ export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, sel
       <IconRow icon={nullIcon} label={nullLabel} selected={selectedId === null} color={color} fg={fg} onPress={handleSelectGuest} />
 
       {sortedProfiles.map((profile) => {
-        const taken = profile.id === takenId
+        const taken = isTaken(profile.id)
         const selected = selectedId === profile.id
         const rowColor = colorPreview ? colorPreview(profile.color) : profile.color
         return (

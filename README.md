@@ -49,7 +49,9 @@ see its own doc comment for why that component is generic over your own `Profile
 - **`ProfilePicker`**: a name trigger + selection popover: pick an existing profile, fall back to a
   null/"guest" selection, or (if `onManage` is passed) navigate to a management screen. Selection
   only - creating, renaming, and deleting all live in `ProfilesManager`. Generic over your own
-  `Profile` type (see above). Placement props (all optional, see "Fake-rotated frames" below):
+  `Profile` type (see above). `takenId` disables one other seat's profile in the list; `takenIds`
+  (an array) disables several, for a lobby with more than two seats, and never disables the
+  picker's own selection, so you can pass every seated id. Placement props (all optional, see "Fake-rotated frames" below):
   `align` (force a horizontal side), `alignOverride` (substitute the whole placement result), and
   `rotation` (forwarded to the automatic measurement). `colorSection`
   (`{ value, onChange, previewValue?, swatches?, label?, caption? }`) puts a Color row at the top of
@@ -72,7 +74,7 @@ see its own doc comment for why that component is generic over your own `Profile
   `profiles`/`defaultColor`/`onCreate`/`onSave`/`onDelete` as `ProfilesManager` itself, plus
   `onBack`. Owns its own `ProfilesManagerHandle` ref internally - there's no `ref` prop here, since
   nothing outside it needs one anymore.
-- **`readSharedProfiles` / `loadSharedProfiles` / `saveSharedProfiles` / `isSharedProfileStoreAvailable`**: an *optional*
+- **`readSharedProfiles` / `loadSharedProfiles` / `saveSharedProfiles` / `subscribeSharedProfiles` / `isSharedProfileStoreAvailable`**: an *optional*
   cross-app roster, shared between multiple apps of yours via a native iOS App Group (same Apple
   Developer Team, same `"com.apple.security.application-groups"` entitlement value on every
   participating app). This only ever carries the base `Profile` shape above - a host app's own
@@ -103,9 +105,17 @@ see its own doc comment for why that component is generic over your own `Profile
   result can't replace a roster or lead to a write.
 
   Backed by a small native Expo Module (`ios/TasticProfileModule.swift`) wrapping
-  `UserDefaults(suiteName:)` - iOS only (see `expo-module.config.json`'s `"apple"`-only platform
-  list); `isSharedProfileStoreAvailable` is `false` on Android/web and on any iOS build that hasn't
-  run `expo prebuild` since adding this App Group's entitlement, so a host app always needs its own
+  `UserDefaults(suiteName:)` on iOS (see `expo-module.config.json`'s `"apple"`-only platform list),
+  and on the web by `localStorage`, under the key `<groupId>:sharedProfiles`: games served from one
+  origin (for example `games.example.com/<game>/`) share it the way apps share an App Group, while
+  games on different origins can't see each other's. The web store writes and removes a probe key
+  once at load and stays unavailable if that fails (storage blocked), and after a write that fails
+  anyway, reads fail until a write succeeds, so an older roster can't undo a local change.
+  `subscribeSharedProfiles(groupId, listener)` hands `listener` the roster another tab or game on
+  the same origin has just saved (the browser's `storage` event); it does nothing on native.
+  `useSharedProfilesSync` subscribes for you. `isSharedProfileStoreAvailable` is `false` on
+  Android, on a web page that can't write `localStorage`, and on any iOS build that hasn't run
+  `expo prebuild` since adding this App Group's entitlement, so a host app always needs its own
   local-storage fallback path regardless of platform. Requires the App Group itself to be declared
   in each consuming app's own Expo config, e.g.:
 
@@ -278,7 +288,7 @@ so a host app plugs the reducer(s) into whatever store it already has:
   Always local, like the guest/CPU/override colors below, and never part of the shared
   App Group roster, since who's selected on *this* device is naturally per-app, per-device state.
 
-## Muted profile colors (`ProfileColorProvider`)
+## Muted profile colors and drawn swatches (`ProfileColorProvider`)
 
 An app that draws profile colors through a transform (Solitaire blends them toward its muted
 card-back palette) wraps its tree once:
@@ -297,6 +307,26 @@ packages that render a `ProfileChip` (e.g. `@tastic/hud`'s `AchievementUnlockLis
 for free. Only what's drawn changes: saved colors, `onCreate`/`onSave` values and selection are
 untouched. `useProfileColorPreview()` returns the provider's function (or `undefined`), and
 `useProfileDisplayColor(hex)` resolves one color. Without a provider nothing changes.
+
+`renderSwatch` (also optional, with or without `preview`) draws the fill of every round swatch this
+package draws, in place of the flat color: `ProfileChip`, the pickers' chip trigger, the Color row's
+swatch and the color page's swatches. It's called as `renderSwatch(color, size)` with the drawn
+color (after `preview`) and the circle's diameter, and its drawing is clipped to the circle, behind
+the tag, icon or check. The tag and check still take their contrast from `color`, so treat it as
+the primary color of whatever you draw. Hangman draws a pie of each color's triad:
+
+```tsx
+import { getTriadicPalette } from '@rific/auto-paper'
+import { ProfileColorProvider, type ProfileSwatchRenderer } from '@tastic/profile'
+
+const renderSwatch: ProfileSwatchRenderer = (color, size) => <TriadPie colors={getTriadicPalette(color)} size={size} />
+<ProfileColorProvider renderSwatch={renderSwatch}>{children}</ProfileColorProvider>
+```
+
+(`TriadPie` is your own component, e.g. three `react-native-svg` arcs.) Give it a stable identity
+(module level, or `useCallback`). Rows that fill with a color (a selected picker row) stay flat, and
+so do `@tastic/hud`'s `InlineColorPicker` swatches in `ProfilesManager`'s edit row, which don't read
+this provider. `useProfileSwatchRenderer()` returns it (or `undefined`).
 
 ## Per-seat color persistence
 
@@ -362,11 +392,16 @@ Published to the public npm registry via tag-based CI (OIDC trusted publishing -
 ## Peer dependencies
 
 `react`, `react-native`, `react-native-paper`, `react-native-safe-area-context`, `@rific/auto-paper`
-(`getContrastColor`, `useAutoPaperTheme`), `@rific/feedback-press` (`TouchableRipple`),
-`@rific/focus-chain` (`useFocusChain`), `@rific/toaster` (`useToast`), `@tastic/hud`
-(`InlineColorPicker`, `PopoverBody`, `PopoverHost`, `useAutoAlign`, `usePopoverHost`), `@tastic/core`
-(a peer of `@tastic/hud` itself) - none of these are bundled, so use whatever versions your app
-already has.
+(`defaultColors`, `FadingScrollView`, `getContrastColor`, `useAutoPaperTheme`), `@rific/feedback-press`
+(`TouchableRipple`), `@rific/focus-chain` (`useFocusChain`), `@rific/toaster` (`useToast`),
+`@tastic/hud` >= 0.23.0 (`ConfirmDialog`, `InlineColorPicker`, `PopoverBody`, `useAutoAlign`,
+`usePopoverHost`), `@tastic/core` (a peer of `@tastic/hud` itself) - none of these are bundled, so
+use whatever versions your app already has.
+
+This package imports `@tastic/hud` only through its light `@tastic/hud/chrome` entry, never the main
+one (which also loads Skia and `@tastic/split-screen`), so an app with neither, like Hangman, can use
+every component here. That's why it needs hud 0.23.0, the first whose `./chrome` has the popover
+pieces and the color picker.
 
 `expo-modules-core` is an *optional* peer - only resolved by `loadSharedProfiles`/`saveSharedProfiles`
 for the native App Group bridge described above; safe to omit entirely on an Android/web-only

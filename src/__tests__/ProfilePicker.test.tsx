@@ -1,14 +1,14 @@
 import { FadingScrollView, getContrastColor } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
-import type { PopoverHost } from '@tastic/hud'
-import { PopoverBody, useAutoAlign } from '@tastic/hud'
+import type { PopoverHost } from '@tastic/hud/chrome'
+import { PopoverBody, useAutoAlign } from '@tastic/hud/chrome'
 import { act, render } from '@testing-library/react'
 import { View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
 
 import { IdentityChip } from '../IdentityChip'
 import { ProfileChip } from '../ProfileChip'
-import { ProfileColorProvider } from '../ProfileColorContext'
+import { ProfileColorProvider, type ProfileSwatchRenderer } from '../ProfileColorContext'
 import { getProfilePickerContentSize, ProfilePicker, ProfilePickerAlignResult, ProfilePickerColorSection } from '../ProfilePicker'
 import { Profile } from '../types'
 
@@ -34,7 +34,7 @@ jest.mock('@rific/feedback-press', () => ({
   TouchableRipple: jest.fn((props: { children?: unknown }) => props.children ?? null)
 }))
 
-jest.mock('@tastic/hud', () => ({
+jest.mock('@tastic/hud/chrome', () => ({
   PopoverBody: jest.fn((props: { visible?: boolean; children?: unknown }) => (props.visible ? (props.children ?? null) : null)),
   useAutoAlign: jest.fn(() => ({
     align: 'center',
@@ -90,9 +90,11 @@ const makeHost = (openId: string | null): MockHost => ({
 interface Overrides {
   host?: MockHost
   preview?: (hex: string) => string
+  renderSwatch?: ProfileSwatchRenderer
   profiles?: Profile[]
   selectedId?: string | null
   takenId?: string | null
+  takenIds?: string[]
   color?: string
   dark?: boolean
   align?: 'left' | 'right' | 'center'
@@ -110,7 +112,18 @@ interface Overrides {
 function renderPicker(overrides: Overrides = {}) {
   const host = overrides.host ?? makeHost(null)
   const onSelect = overrides.onSelect ?? jest.fn()
-  const utils = render(<ProfilePicker idPrefix={ID_PREFIX} host={host} profiles={overrides.profiles ?? PROFILES} selectedId={overrides.selectedId ?? null} takenId={overrides.takenId} color={overrides.color ?? '#123456'} dark={overrides.dark ?? false} align={overrides.align} alignOverride={overrides.alignOverride} rotation={overrides.rotation} guestLabel={overrides.guestLabel ?? 'guest'} nullLabel={overrides.nullLabel} nullIcon={overrides.nullIcon} onSelect={onSelect} onManage={overrides.onManage} colorSection={overrides.colorSection} triggerStyle={overrides.triggerStyle} />, overrides.preview ? { wrapper: ({ children }) => <ProfileColorProvider preview={overrides.preview!}>{children}</ProfileColorProvider> } : undefined)
+  const utils = render(
+    <ProfilePicker idPrefix={ID_PREFIX} host={host} profiles={overrides.profiles ?? PROFILES} selectedId={overrides.selectedId ?? null} takenId={overrides.takenId} takenIds={overrides.takenIds} color={overrides.color ?? '#123456'} dark={overrides.dark ?? false} align={overrides.align} alignOverride={overrides.alignOverride} rotation={overrides.rotation} guestLabel={overrides.guestLabel ?? 'guest'} nullLabel={overrides.nullLabel} nullIcon={overrides.nullIcon} onSelect={onSelect} onManage={overrides.onManage} colorSection={overrides.colorSection} triggerStyle={overrides.triggerStyle} />,
+    overrides.preview || overrides.renderSwatch
+      ? {
+          wrapper: ({ children }) => (
+            <ProfileColorProvider preview={overrides.preview} renderSwatch={overrides.renderSwatch}>
+              {children}
+            </ProfileColorProvider>
+          )
+        }
+      : undefined
+  )
   return { ...utils, host, onSelect }
 }
 
@@ -260,6 +273,39 @@ describe('ProfilePicker', () => {
       // The untaken rows still work.
       pressOf(mockTouchableRipple.mock.calls[2])?.() // Amy
       expect(onSelect).toHaveBeenCalledWith(AMY)
+    })
+
+    // The profile rows' pressables, by name (they're sorted: Amy, Mike, Zoe, after the trigger and the null row).
+    const profileRowCalls = () => mockTouchableRipple.mock.calls.slice(2, 5)
+
+    it('disables every takenIds row and blocks selecting them, for a lobby with more seats', () => {
+      const { host, onSelect } = renderPicker({ host: makeHost(TRIGGER_ID), takenIds: [MIKE.id, ZOE.id] })
+      expect(profileRowCalls().map((call) => (call[0] as { disabled?: boolean }).disabled)).toEqual([false, true, true])
+
+      pressOf(profileRowCalls()[1])?.() // Mike
+      pressOf(profileRowCalls()[2])?.() // Zoe
+      expect(onSelect).not.toHaveBeenCalled()
+      expect(host.close).not.toHaveBeenCalled()
+
+      pressOf(profileRowCalls()[0])?.() // Amy
+      expect(onSelect).toHaveBeenCalledWith(AMY)
+    })
+
+    it('disables the union when takenId and takenIds are both given', () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), takenId: AMY.id, takenIds: [ZOE.id] })
+      expect(profileRowCalls().map((call) => (call[0] as { disabled?: boolean }).disabled)).toEqual([true, false, true])
+    })
+
+    it("never counts this picker's own selection as taken through takenIds, so a host can pass every seated id", () => {
+      const { onSelect } = renderPicker({ host: makeHost(TRIGGER_ID), selectedId: MIKE.id, takenIds: [AMY.id, MIKE.id] })
+      expect(profileRowCalls().map((call) => (call[0] as { disabled?: boolean }).disabled)).toEqual([true, false, false])
+      pressOf(profileRowCalls()[1])?.() // Mike, already selected here
+      expect(onSelect).toHaveBeenCalledWith(MIKE)
+    })
+
+    it('disables nothing for an empty takenIds', () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), takenIds: [] })
+      expect(mockTouchableRipple.mock.calls.filter((call) => (call[0] as { disabled?: boolean }).disabled === true)).toHaveLength(0)
     })
 
     it('renders nothing but the null row when there are no saved profiles', () => {
@@ -655,6 +701,51 @@ describe('ProfilePicker', () => {
       act(() => pressOf(swatch)!())
       expect(onChange).toHaveBeenCalledWith(SWATCH(7))
       expect(host.close).not.toHaveBeenCalled()
+    })
+
+    describe("with ProfileColorProvider's renderSwatch", () => {
+      // Stands in for a host's drawing (Hangman's pie of the color's triad); its calls are what was drawn.
+      const renderSwatch = jest.fn((_color: string, _size: number) => null)
+      const drawnSwatches = () => renderSwatch.mock.calls.map(([color, size]) => ({ color, size }))
+      // SwatchLayer's clip: the absolutely placed View the drawing sits in.
+      const layerStyles = () => mockView.mock.calls.map((call) => (call[0] as { style?: unknown }).style).filter((style) => Array.isArray(style) && (style[0] as { position?: string })?.position === 'absolute' && (style[0] as { overflow?: string })?.overflow === 'hidden') as object[][]
+
+      it("draws the Color row's swatch with it, through previewValue, in place of the flat fill", () => {
+        renderPicker({ host: makeHost(TRIGGER_ID), renderSwatch, colorSection: section({ previewValue: (hex) => `muted(${hex})` }) })
+        expect(drawnSwatches()).toEqual([{ color: `muted(${SWATCH(3)})`, size: 22 }])
+        expect(mockView.mock.calls.some((call) => Array.isArray((call[0] as { style?: unknown }).style) && ((call[0] as { style: unknown[] }).style as object[]).some((part) => (part as { backgroundColor?: string })?.backgroundColor === `muted(${SWATCH(3)})`))).toBe(false)
+        expect(layerStyles()).toEqual([expect.arrayContaining([{ borderRadius: 11, height: 22, width: 22 }])])
+      })
+
+      it("draws every color page swatch with it, inside the selected one's ring, with no flat fill", () => {
+        renderPicker({ host: makeHost(TRIGGER_ID), renderSwatch, colorSection: section({ previewValue: (hex) => `muted(${hex})` }) })
+        openColorPage()
+        expect(drawnSwatches()).toEqual(Array.from({ length: 20 }, (_, i) => ({ color: `muted(${SWATCH(i)})`, size: i === 3 ? 24 : 28 })))
+        const swatchStyles = swatchCalls().map((call) => (call[0] as { style: unknown[] }).style)
+        expect(swatchStyles).toHaveLength(20)
+        expect(swatchStyles.filter((style) => style.some((part) => !!part && typeof part === 'object' && 'backgroundColor' in part))).toEqual([])
+      })
+
+      it("takes the check's and the X's contrast from the swatch's own color, and keeps each swatch one child", () => {
+        renderPicker({ host: makeHost(TRIGGER_ID), renderSwatch, colorSection: section({ takenValue: SWATCH(9) }) })
+        openColorPage()
+        expect(findIcon('check')?.color).toBe(`contrast(${SWATCH(3)})`)
+        expect(findIcon('close')?.color).toBe(`contrast(${SWATCH(9)})`)
+        // TouchableRipple takes one child: the drawn swatch and its mark share a face View.
+        for (const call of swatchCalls()) {
+          const child = (call[0] as { children?: unknown }).children
+          expect(Array.isArray(child)).toBe(false)
+          expect((child as { type?: unknown }).type).toBe(View)
+        }
+      })
+
+      it('leaves the flat swatches alone without it', () => {
+        renderPicker({ host: makeHost(TRIGGER_ID), preview: (hex) => hex, colorSection: section() })
+        openColorPage()
+        expect(renderSwatch).not.toHaveBeenCalled()
+        expect(layerStyles()).toEqual([])
+        expect((swatchCalls()[0][0] as { style?: unknown[] }).style).toEqual(expect.arrayContaining([{ backgroundColor: SWATCH(0) }]))
+      })
     })
 
     it('is sized as the taller page: the list with the Color row and its divider, or the back row and 4 rows of swatches', () => {

@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { AppState } from 'react-native'
 
-import { isSharedProfileStoreAvailable, readSharedProfiles, saveSharedProfiles } from '../sharedProfileStore'
+import { isSharedProfileStoreAvailable, readSharedProfiles, saveSharedProfiles, subscribeSharedProfiles } from '../sharedProfileStore'
 import { Profile } from '../types'
 
 export interface UseSharedProfilesSyncOptions {
   groupId: string
   // Called with a freshly-read shared roster whenever the app returns to the foreground - the
-  // shared store has no cross-process change notification, so this is what catches "edited a
-  // profile in a different @tastic app, then switched back to this one." Skipped while a
-  // syncToShared write is still in flight (see pendingWriteRef below), skipped when the read fails
-  // (a failed read is not an empty roster, see readSharedProfiles), and never called at all when
-  // the shared store isn't available.
+  // App Group has no cross-process change notification, so this is what catches "edited a
+  // profile in a different @tastic app, then switched back to this one." On the web it is also
+  // called the moment another tab or game on the same origin saves the roster (the browser's
+  // `storage` event, see subscribeSharedProfiles), so two games open side by side don't overwrite
+  // each other's edits. Skipped while a syncToShared write is still in flight (see pendingWriteRef
+  // below), skipped when the read fails (a failed read is not an empty roster, see
+  // readSharedProfiles), and never called at all when the shared store isn't available.
   onRemoteChange: (profiles: Profile[]) => void
 }
 
@@ -52,9 +54,13 @@ export function useSharedProfilesSync({ groupId, onRemoteChange }: UseSharedProf
         if (!cancelled && shared !== null) onRemoteChangeRef.current(shared)
       })
     })
+    const unsubscribe = subscribeSharedProfiles(groupId, (shared) => {
+      if (!cancelled && !pendingWriteRef.current) onRemoteChangeRef.current(shared)
+    })
     return () => {
       cancelled = true
       sub.remove()
+      unsubscribe()
     }
   }, [groupId])
 

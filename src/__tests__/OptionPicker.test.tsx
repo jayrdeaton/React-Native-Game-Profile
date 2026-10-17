@@ -1,6 +1,6 @@
 import { TouchableRipple } from '@rific/feedback-press'
-import type { PopoverHost } from '@tastic/hud'
-import { useAutoAlign } from '@tastic/hud'
+import type { PopoverHost } from '@tastic/hud/chrome'
+import { useAutoAlign } from '@tastic/hud/chrome'
 import { act, render } from '@testing-library/react'
 import { Icon, Text } from 'react-native-paper'
 
@@ -19,7 +19,7 @@ jest.mock('@rific/feedback-press', () => ({
   TouchableRipple: jest.fn((props: { children?: unknown }) => props.children ?? null)
 }))
 
-jest.mock('@tastic/hud', () => ({
+jest.mock('@tastic/hud/chrome', () => ({
   PopoverBody: jest.fn((props: { visible?: boolean; children?: unknown }) => (props.visible ? (props.children ?? null) : null)),
   useAutoAlign: jest.fn(() => ({
     align: 'center',

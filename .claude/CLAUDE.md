@@ -15,7 +15,7 @@ npm run build        # tsup, outputs CJS + ESM + types to dist/
 npm run build:watch  # tsup --watch
 npm run lint         # ESLint
 npm run fix          # ESLint --fix
-npm test             # Jest (275 tests)
+npm test             # Jest (291 tests)
 npm run test:watch   # Jest in watch mode
 npm run typecheck    # TypeScript type check (tsc --noEmit)
 npm run verify       # lint + test + typecheck + build, in that order
@@ -40,7 +40,7 @@ src/
   index.ts                  - all public exports
   types.ts                  - Profile interface: id, name, color, tag, createdAt, updatedAt
   profilesValidation.ts     - MAX_PROFILE_NAME_LENGTH/MAX_TAG_LENGTH, isValidTag (plain chars or one ZWJ-joined emoji), isValidProfile (base-fields-only validator)
-  sharedProfileStore.ts     - optional cross-app roster via a native iOS App Group; lazily/optionally resolves expo-modules-core's TasticProfile native module, degrades to unavailable (empty reads, no-op writes) everywhere else. readSharedProfiles tells a failed read (null) from an empty roster ([]); loadSharedProfiles flattens both to []
+  sharedProfileStore.ts     - optional cross-app roster via a native iOS App Group, or localStorage on the web (see "The web roster" below); lazily/optionally resolves expo-modules-core's TasticProfile native module, degrades to unavailable (empty reads, no-op writes) on Android. readSharedProfiles tells a failed read (null) from an empty roster ([]); loadSharedProfiles flattens both to []; subscribeSharedProfiles delivers another tab's save on the web
   seatColorClash.ts         - avoidSeatColorClash(p1Color, p2Color, [p1Default, p2Default]): seat 2's display color moved off seat 1's when both resolve to the same color
   redux/                    - optional Redux-shaped state helpers; no dependency on redux/react-redux, a host app plugs these into its own store
     createActionCreator.ts    - internal `{ type, match }` action-creator factory shared by the slices below; not exported from index.ts
@@ -51,7 +51,8 @@ src/
     resolveInitialProfiles.ts - one-time initial-roster decision: local fallback when the shared store is unavailable, unreadable or empty (seeding it only when empty), otherwise shared always wins
     useSharedProfilesSync.ts  - keeps a Redux-backed roster in sync with the shared store: syncToShared() mirrors writes out, an AppState listener refreshes on foreground
   ProfileChip.tsx           - a profile's identity at a glance: filled color circle + tag (or fallback account icon) in a contrast-safe color
-  ProfileColorContext.tsx   - ProfileColorProvider: app-wide drawn-color transform for profile colors (Solitaire's muted palette)
+  ProfileColorContext.tsx   - ProfileColorProvider: app-wide drawn-color transform for profile colors (Solitaire's muted palette) and an optional swatch renderer (Hangman's triad pie)
+  SwatchLayer.tsx           - internal (not exported from index.ts): a renderSwatch drawing in place of a swatch's flat fill, absolutely placed and clipped to the circle; used by IdentityChip and PickerMenu
   PickerMenu.tsx            - internal (not exported from index.ts): the trigger (plain name or chip pill), the bordered menu, the Color row and color page, IconRow, pickerContentSize; shared by ProfilePicker and OptionPicker
   ProfilePicker.tsx         - name trigger + selection popover; generic over an app's own richer Profile type; selection-only (no create/rename/delete)
   OptionPicker.tsx          - the chip button and dropdown for a seat with no profile (a CPU seat's difficulty levels), under the same Color row
@@ -65,6 +66,8 @@ src/
     ProfilePicker.test.tsx
     ProfilesManager.test.tsx
     ProfilesScreen.test.tsx
+    OptionPicker.test.tsx
+    hudImports.test.ts      - every quoted '@tastic/hud...' specifier under src/ (imports, jest.mock, require) is '@tastic/hud/chrome'
     profileExtensionSlice.test.ts
     profilesSlice.test.ts
     profileSelectionSlice.test.ts
@@ -84,15 +87,15 @@ ios/
 From `src/index.ts`:
 
 - `ProfileChip` - identity badge component (`profile`, `size?`, `filled?`); draws `ProfileColorProvider`'s preview of `profile.color` when one is mounted
-- `ProfileColorProvider` / `useProfileColorPreview` / `useProfileDisplayColor` - app-wide drawn-color transform (2026-09-25). A context, not a per-component prop, because the prop-only `colorPreview` on `ProfilesScreen` had left `ProfilesManager`'s roster chips and `ProfilePicker`'s rows drawing Solitaire's profiles unmuted; also reaches `ProfileChip`s rendered by other packages (`@tastic/hud`'s `AchievementUnlockList`). An explicit `colorPreview` prop on `ProfilesManager`/`ProfilesScreen` still wins over it.
-- `ProfilePicker` - generic selection-popover component (see Architecture above). Placement seam for hosts inside a fake-rotated frame (a View turned +-90deg on a portrait-locked OS, where `useAutoAlign`'s window-relative measurement picks the wrong side): optional `alignOverride?: ProfilePickerAlignResult` (substitutes the whole placement - align/verticalAlign/maxHeight/measured/triggerRef; a forced `align` prop still beats its `align`) and `rotation?: PopoverRotation` (default 0, forwarded to `useAutoAlign`; deliberately NOT read ambiently from `@tastic/core`, which this package never imports at runtime, so existing callers behave identically). Both mirror `@tastic/hud`'s `InlineColorPicker`.
+- `ProfileColorProvider` / `useProfileColorPreview` / `useProfileDisplayColor` / `useProfileSwatchRenderer`, `ProfileSwatchRenderer` (type) - app-wide drawn-color transform (2026-09-25) and swatch renderer (2026-10-17, see "Three-color swatches" below). Both props are optional. A context, not a per-component prop, because the prop-only `colorPreview` on `ProfilesScreen` had left `ProfilesManager`'s roster chips and `ProfilePicker`'s rows drawing Solitaire's profiles unmuted; also reaches `ProfileChip`s rendered by other packages (`@tastic/hud`'s `AchievementUnlockList`). An explicit `colorPreview` prop on `ProfilesManager`/`ProfilesScreen` still wins over it.
+- `ProfilePicker` - generic selection-popover component (see Architecture above). `takenId?` disables one other seat's profile; `takenIds?: readonly string[]` (2026-10-17) disables several, for a lobby with more than two seats, skipping the picker's own selection. Placement seam for hosts inside a fake-rotated frame (a View turned +-90deg on a portrait-locked OS, where `useAutoAlign`'s window-relative measurement picks the wrong side): optional `alignOverride?: ProfilePickerAlignResult` (substitutes the whole placement - align/verticalAlign/maxHeight/measured/triggerRef; a forced `align` prop still beats its `align`) and `rotation?: PopoverRotation` (default 0, forwarded to `useAutoAlign`; deliberately NOT read ambiently from `@tastic/core`, which this package never imports at runtime, so existing callers behave identically). Both mirror `@tastic/hud`'s `InlineColorPicker`.
 - `OptionPicker`, `OptionPickerOption`, `getOptionPickerContentSize(optionCount, colorSection?)` - ProfilePicker's chip button for a list of options instead of profiles (see "The seat button" below)
 - `getProfilePickerContentSize(profileCount, hasManageRow?)`, `ProfilePickerContentSize`, `ProfilePickerAlignResult` - the popover's `{ width, height }` as the component feeds it to `useAutoAlign` (the single formula; it omits the menu's 2pt border and the Manage divider, ~13pt, so it is a placement estimate), so a host sizing its own `alignOverride` hook can't drift; `ProfilePickerAlignResult` is declared locally (structurally identical to `@tastic/hud` >= 0.12.0's `AlignResult`, which the peer range `>=0.8.0` doesn't guarantee exists), so hud's own `AlignResult` is assignable to it. `rotation` needs `@tastic/hud` >= 0.8.0 to have any effect (`useAutoAlign`'s 4th parameter and the `PopoverRotation` export arrived there); older versions ignore it.
 - **`ProfilesManager`/`ProfilesScreen` `useColorPickerAlign?: (open, contentWidth, contentHeight) => ProfilePickerAlignResult`** - the same fake-rotation seam for the edit row's colour swatch, which `ProfilesManager` renders itself (its popover state is internal, so a host can't reach `InlineColorPicker`'s `alignOverride`). Called by a small internal `AlignedColorPicker` (rendered INSTEAD of the plain `InlineColorPicker` only when the prop is given, so the hook is always called unconditionally and the plain path is unchanged), sized with hud's `getInlineColorPickerContentSize(defaultColors.length, useWindowDimensions().width)` exactly as `InlineColorPicker` sizes itself, and its result is passed as `alignOverride` (so hud >= 0.12.0 to have an effect). Give the hook a stable identity per mount. Tests in `ProfilesManager.test.tsx`/`ProfilesScreen.test.tsx`.
 - `ProfilesManager`, `ProfilesManagerProps`, `ProfilesManagerHandle`, `ProfileEditPatch` - roster management screen; accepts `ref` (React 19 ref-as-prop, no `forwardRef`) exposing `commitPendingEdit()` - a host whose router doesn't genuinely unmount this component on "back" (React Navigation's web renderer keeps popped screens mounted-but-hidden, unlike native) must call this explicitly from its own back-button handler, or a pending edit is silently lost there. The existing unmount-effect fallback still covers every host where navigating away really does unmount (native, hardware back/swipe-back bypassing a custom back button). `ProfileEditPatch` (`name`/`color`/`tag`) is the shape `onCreate`/`onSave` both take - was a private, unexported interface inside `ProfilesManager.tsx` until the `ProfilesScreen` extraction below needed to reference it publicly from `ProfilesScreenProps`'s own `onCreate`/`onSave`, surfacing a small pre-existing gap in this package's public surface rather than adding new API for its own sake.
 - `ProfilesScreen`, `ProfilesScreenProps` - routed profiles-roster screen shell wrapping `ProfilesManager` (see "Profiles screen extraction (2026-09-18)" below for what it owns and why); stays props-in/callbacks-out like `ProfilesManager` itself, never calling a host's own `useProfiles()`/`useGameStats()`-shaped hooks internally, since those hooks' shapes are genuinely per-app
 - `isValidProfile`, `isValidTag`, `MAX_PROFILE_NAME_LENGTH`, `MAX_TAG_LENGTH` - validation
-- `isSharedProfileStoreAvailable`, `readSharedProfiles`, `loadSharedProfiles`, `saveSharedProfiles` - optional native App Group shared store (`readSharedProfiles` resolves to `null` on a failed read; `loadSharedProfiles` is the older form that flattens that to `[]`)
+- `isSharedProfileStoreAvailable`, `readSharedProfiles`, `loadSharedProfiles`, `saveSharedProfiles`, `subscribeSharedProfiles` - optional shared store: the native App Group on iOS, localStorage on the web (`readSharedProfiles` resolves to `null` on a failed read; `loadSharedProfiles` is the older form that flattens that to `[]`; `subscribeSharedProfiles` is web-only, a no-op elsewhere)
 - `profilesActions`, `profilesReducer`, `createProfileRecord`, `CreateProfileInput`, `UpdateProfilePayload` - base roster as a Redux reducer (add/update/remove/setAll) plus a helper to mint a new `Profile`
 - `createProfileExtensionSlice`, `ProfileExtensionActions`, `ProfileExtensionSlice`, `ProfileExtensionState`, `SetProfileExtensionPayload` - factory for a host app's own namespaced per-profile-id extension slice
 - `resolveInitialProfiles` - one-time initial-roster resolution against the shared store
@@ -104,20 +107,22 @@ From `src/index.ts`:
 
 ## Peer Dependencies
 
+The ranges are `package.json`'s `peerDependencies`; keep this list in step with it (it had drifted to auto-paper >=0.9.0 and hud >=0.1.3 until 2026-10-17).
+
 - `react` >=19.0.0, `react-native` >=0.76.0, `react-native-paper` >=5.0.0, `react-native-safe-area-context` >=4.0.0 - required
-- `@rific/auto-paper` >=0.9.0 (`getContrastColor`, `useAutoPaperTheme`) - required
+- `@rific/auto-paper` >=0.13.0 (`defaultColors`, `FadingScrollView`, `getContrastColor`, `useAutoPaperTheme`) - required
 - `@rific/feedback-press` >=0.10.0 (`TouchableRipple`) - required
 - `@rific/focus-chain` >=0.4.0 (`useFocusChain`) - required
 - `@rific/toaster` >=0.4.0 (`useToast`) - required
-- `@tastic/core` >=0.1.0 - required
-- `@tastic/hud` >=0.1.3 (`InlineColorPicker`, `PopoverBody`, `PopoverHost`, `useAutoAlign`, `usePopoverHost`) - required
-- `expo-modules-core` >=1.0.0 - optional (`peerDependenciesMeta`); only used by `sharedProfileStore.ts`'s App Group bridge, guarded by `try { require(...) }`, so it's safe to omit entirely on Android/web-only consumers
+- `@tastic/core` >=0.1.0 - required (a peer of `@tastic/hud`; this package never imports it at runtime)
+- `@tastic/hud` >=0.23.0, through its `./chrome` entry only (`ConfirmDialog`, `getInlineColorPickerContentSize`, `InlineColorPicker`, `PopoverBody`, `useAutoAlign`, `usePopoverHost`, and the types `PopoverHost`, `PopoverRotation`) - required. 0.23.0 is the first hud whose `./chrome` has the popover pieces and the color picker
+- `expo-modules-core` >=1.0.0 - optional (`peerDependenciesMeta`); only used by `sharedProfileStore.ts`'s App Group bridge, guarded by `try { require(...) }`, so it's safe to omit entirely on Android/web-only consumers (the web store needs nothing from it)
 
 ## Testing
 
 - Framework: Jest (`@infinitetoken/jest-config/react-native`), jsdom environment
-- Mocks in `src/__mocks__/` for `react-native`, `react-native-paper`
-- 275 tests across 14 suites
+- Mocks in `src/__mocks__/` for `react-native`, `react-native-paper`; the suites that need hud mock `@tastic/hud/chrome` (the specifier the source imports)
+- 291 tests across 15 suites
 - Coverage (measured 2026-09-15): **100 / 94.44 / 98.41 / 100** (statements/branches/functions/lines),
   against the shared preset's 70% floor on all four metrics - no local `coverageThreshold` override.
   Branch gaps are in `ProfilesManager.tsx` (lines 88, 108-115, 208-235); the one function gap is
@@ -128,6 +133,26 @@ From `src/index.ts`:
   `testEnvironmentOptions.customExportConditions: []` itself, needed here since `@tastic/hud` (imported
   for real, unmocked, in `ProfilePicker.tsx`/`ProfilesManager.tsx`) has the same `"browser"` exports
   condition pointing at raw `src/index.ts` that broke `@tastic/core` consumers before the fix
+
+## The web roster (2026-10-17)
+
+For Jay's move of the web games onto one origin, games.infinitetoken.com/<game>/ (Games-Web hosts it; see its CLAUDE.md). localStorage is per origin, so on one origin every game can share the roster the way the iOS App Group does. Not released yet; it wants a minor (a new export and new web behavior). Version bump and release are Jay's.
+
+- **Where:** `sharedProfileStore.ts`, not a `.web.ts` file (that would be missing from `dist`). When no native module loads and `Platform.OS === 'web'`, `native` is a localStorage adapter with the same `getSharedJSON`/`setSharedJSON` shape, so `readSharedProfiles`/`saveSharedProfiles` and every consumer are unchanged. Key: `<groupId>:sharedProfiles` (`group.com.infinitetoken.tastic:sharedProfiles` for the fleet). Android stays unavailable; `expo-module.config.json` is unchanged.
+- **Never a silent wipe:** the adapter writes and removes a probe key once at load and stays unavailable if touching localStorage throws (storage blocked, a sandboxed frame): a store that took writes and kept none would leave the key missing, the next read would return [] and `useSharedProfilesSync` would hand that over as the roster. After a write that fails anyway (the quota), reads fail (so `readSharedProfiles` returns null and nothing is replaced) until a write succeeds.
+- **Two windows:** `subscribeSharedProfiles(groupId, listener)` listens to the browser's `storage` event (which only fires in OTHER tabs) for the roster key, runs the same parse, and skips a removal, a `clear()` and an unreadable blob, so none of them can spread a wipe. `useSharedProfilesSync` subscribes next to its AppState listener, with the same pending-write and cancelled guards, so the games need no change. Before it, two visible windows only saw each other's edits after a tab switch, and the last writer won.
+- **Games:** Snake, Solitaire and LightCycles use `resolveInitialProfiles`/`useSharedProfilesSync` with the same group id, so they pick it up with the release. Each game's own redux-persist state is namespaced too (`keyPrefix: '<game>:'`), or they'd overwrite each other's `persist:root` on one origin.
+- Tests: `sharedProfileStore.test.ts`'s web describe (round trip and key, [] vs null, unavailable off the web, with blocked storage and with a storage that takes no writes, the failed-write latch, the storage event and what it ignores) and `useSharedProfilesSync.test.ts`'s remote-save describe. Checked 2026-10-17 on a local server with the hub, Snake and LightCycles on one origin (each built with these two files copied over its installed 0.15.0, then put back): a profile created on Snake's Profiles screen was in LightCycles' on load, and one created in a LightCycles tab appeared in a background Snake tab without a reload or a tab switch (the storage event). Not checked on a deployed site or in Safari.
+
+## hud's chrome entry, three-color swatches and takenIds (2026-10-17)
+
+For Hangman, which wants `ProfilePicker`/`ProfilesScreen` and has no Skia, `@tastic/profile`-dependent lobby or `@tastic/split-screen`. Not released yet; it wants a minor (the `@tastic/hud` peer floor rises to 0.23.0). Version bump and release are Jay's.
+
+- **Every hud import is `@tastic/hud/chrome`** (`PickerMenu.tsx`, `ProfilePicker.tsx`, `OptionPicker.tsx`, `ProfilesManager.tsx` and the three suites' mocks), type-only names as `import type`. hud's main entry also re-exports the per-seat lobby, `AchievementUnlockList` and the Skia gauge, so one import from it made every app using this package need Skia and split-screen. hud 0.23.0 added `PopoverBody`, `PressAwayOverlay`, `usePopoverHost`/`PopoverHost`, `useAutoAlign` and its types, `InlineColorPicker` and `getInlineColorPickerContentSize` to `./chrome` for this (hud commit 31cf73b); `ConfirmDialog` was already there. The peer floor and the devDependency are 0.23.0 (`>=0.23.0`, `^0.23.0`). Guarded twice: `eslint.config.cjs` bans the bare `'@tastic/hud'` with `no-restricted-imports`, and `src/__tests__/hudImports.test.ts` checks every quoted hud specifier under `src/` (which also covers `jest.mock()` and `require()`, which the lint rule doesn't see) is the chrome entry. `ProfilePickerAlignResult` stays declared locally, though hud's `AlignResult` is now guaranteed by the floor.
+- **The lockfile recorded hud 0.22.0** until 2026-10-17 (made before hud 0.23.0 was published), so `npm ci` and `preversion` failed. Refreshed then against the published 0.23.0 (`npm install`, then `npx -y npm@10 install --package-lock-only` for CI's npm 10); not committed yet. Developed and verified against the unreleased hud through yalc (`npx yalc add @tastic/hud`, then `package.json` restored by hand).
+- **`ProfileColorProvider`'s `renderSwatch?: (color, size) => ReactNode`** replaces the flat fill of every round swatch this package draws: `IdentityChip` (so `ProfileChip`, and the pickers' chip trigger, `OptionPicker`'s CPU chip included), `PickerMenu`'s Color row swatch (22pt) and every color page swatch (28pt, or 24 inside the selected one's 2pt white ring). `color` is the drawn color (after `preview`/`previewValue`) and stays the primary one: the tag, icon, check, X, swap icon and home dot take their contrast from it, as before. Hangman passes a pie of each color's triad (auto-paper's `getTriadicPalette`). The drawing sits in the internal `SwatchLayer` (absolute at the swatch's top left, inside any border, `overflow: hidden` and round, no pointer events), behind the mark. A color page swatch's `TouchableRipple` takes one child (Paper's `React.Children.only`), so with a renderer the drawing and the mark share an absolute-fill face View; without one the swatch's child is the mark alone, as before. Without `renderSwatch` nothing changes. `preview` is optional now too, so a provider can give either or both. Not covered: rows that fill with a color (a selected picker row) stay flat, an unfilled `ProfileChip` draws nothing, and hud's `InlineColorPicker` (ProfilesManager's edit-row color trigger and swatches) draws its own flat swatches and doesn't read this context.
+- **`ProfilePicker`'s `takenIds?: readonly string[]`**, alongside `takenId`, for an N-seat lobby: every id in it is disabled (dimmed, and a press does nothing), the same as `takenId`. Unlike `takenId`, a `takenIds` entry never disables the picker's own selection, so a host can pass every seated id, its own included. `takenId` is unchanged.
+- Tests: `hudImports.test.ts` (2), `ProfileChip.test.tsx`'s renderSwatch describe (6: the fill in place of the flat color, preview's color handed to it, nothing for an unfilled chip, the chip trigger's `IdentityChip`, either prop alone and the hooks, the flat fill without a provider), `ProfilePicker.test.tsx`'s takenIds cases (4) and renderSwatch describe (4: the Color row swatch, the color page sizes in and out of the ring with no flat fill, contrast from the swatch's color with one child per swatch, flat swatches without it).
 
 ## Profiles screen extraction (2026-09-18)
 
@@ -221,6 +246,7 @@ Enforced by ESLint + Prettier, run `npm run lint` before finishing any task.
 - `react-hooks/rules-of-hooks` - error, not a warning
 - `react-hooks/exhaustive-deps`, `react-hooks/refs`, `react-hooks/immutability`, `react-hooks/preserve-manual-memoization`, `react-hooks/set-state-in-effect`
 - `package-json/order-properties`, `package-json/sort-collections` - on `package.json` itself
+- `no-restricted-imports` - error: the bare `'@tastic/hud'` specifier (local, in `eslint.config.cjs`; import from `'@tastic/hud/chrome'`, see "hud's chrome entry" above)
 
 `src/__mocks__/**` is excluded from linting (see `eslint.config.cjs`'s own comment) - `tsconfig.json` excludes it too, so the type-aware parser can't resolve those files in-project.
 
