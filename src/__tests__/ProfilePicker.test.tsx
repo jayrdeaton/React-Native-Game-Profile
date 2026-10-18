@@ -3,12 +3,13 @@ import { TouchableRipple } from '@rific/feedback-press'
 import type { PopoverHost } from '@tastic/hud/chrome'
 import { PopoverBody, useAutoAlign } from '@tastic/hud/chrome'
 import { act, render } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
 
 import { IdentityChip } from '../IdentityChip'
 import { ProfileChip } from '../ProfileChip'
-import { ProfileColorProvider, type ProfileSwatchRenderer } from '../ProfileColorContext'
+import { ProfileColorProvider, type ProfileSwatchPlace, type ProfileSwatchRenderer } from '../ProfileColorContext'
 import { getProfilePickerContentSize, ProfilePicker, ProfilePickerAlignResult, ProfilePickerColorSection } from '../ProfilePicker'
 import { Profile } from '../types'
 
@@ -705,14 +706,15 @@ describe('ProfilePicker', () => {
 
     describe("with ProfileColorProvider's renderSwatch", () => {
       // Stands in for a host's drawing (Hangman's pie of the color's triad); its calls are what was drawn.
-      const renderSwatch = jest.fn((_color: string, _size: number) => null)
-      const drawnSwatches = () => renderSwatch.mock.calls.map(([color, size]) => ({ color, size }))
+      // Anything but null or undefined counts as drawn.
+      const renderSwatch = jest.fn((_color: string, _size: number, _place: ProfileSwatchPlace): ReactNode => true)
+      const drawnSwatches = () => renderSwatch.mock.calls.map(([color, size, place]) => ({ color, size, place }))
       // SwatchLayer's clip: the absolutely placed View the drawing sits in.
       const layerStyles = () => mockView.mock.calls.map((call) => (call[0] as { style?: unknown }).style).filter((style) => Array.isArray(style) && (style[0] as { position?: string })?.position === 'absolute' && (style[0] as { overflow?: string })?.overflow === 'hidden') as object[][]
 
       it("draws the Color row's swatch with it, through previewValue, in place of the flat fill", () => {
         renderPicker({ host: makeHost(TRIGGER_ID), renderSwatch, colorSection: section({ previewValue: (hex) => `muted(${hex})` }) })
-        expect(drawnSwatches()).toEqual([{ color: `muted(${SWATCH(3)})`, size: 22 }])
+        expect(drawnSwatches()).toEqual([{ color: `muted(${SWATCH(3)})`, size: 22, place: 'colorRow' }])
         expect(mockView.mock.calls.some((call) => Array.isArray((call[0] as { style?: unknown }).style) && ((call[0] as { style: unknown[] }).style as object[]).some((part) => (part as { backgroundColor?: string })?.backgroundColor === `muted(${SWATCH(3)})`))).toBe(false)
         expect(layerStyles()).toEqual([expect.arrayContaining([{ borderRadius: 11, height: 22, width: 22 }])])
       })
@@ -720,7 +722,7 @@ describe('ProfilePicker', () => {
       it("draws every color page swatch with it, inside the selected one's ring, with no flat fill", () => {
         renderPicker({ host: makeHost(TRIGGER_ID), renderSwatch, colorSection: section({ previewValue: (hex) => `muted(${hex})` }) })
         openColorPage()
-        expect(drawnSwatches()).toEqual(Array.from({ length: 20 }, (_, i) => ({ color: `muted(${SWATCH(i)})`, size: i === 3 ? 24 : 28 })))
+        expect(drawnSwatches()).toEqual(Array.from({ length: 20 }, (_, i) => ({ color: `muted(${SWATCH(i)})`, size: i === 3 ? 24 : 28, place: 'colorPage' })))
         const swatchStyles = swatchCalls().map((call) => (call[0] as { style: unknown[] }).style)
         expect(swatchStyles).toHaveLength(20)
         expect(swatchStyles.filter((style) => style.some((part) => !!part && typeof part === 'object' && 'backgroundColor' in part))).toEqual([])
@@ -737,6 +739,17 @@ describe('ProfilePicker', () => {
           expect(Array.isArray(child)).toBe(false)
           expect((child as { type?: unknown }).type).toBe(View)
         }
+      })
+
+      // Hangman keeps its chips flat and draws only where a color is chosen: a swatch the renderer
+      // returns null for keeps its flat fill.
+      it('keeps the flat fill wherever the renderer returns null', () => {
+        const onlyColorPage = jest.fn((_color: string, _size: number, place: ProfileSwatchPlace): ReactNode => (place === 'colorPage' ? true : null))
+        renderPicker({ host: makeHost(TRIGGER_ID), renderSwatch: onlyColorPage, colorSection: section() })
+        expect(onlyColorPage).toHaveBeenCalledWith(SWATCH(3), 22, 'colorRow')
+        expect(layerStyles()).toEqual([])
+        openColorPage()
+        expect(layerStyles()).toHaveLength(20)
       })
 
       it('leaves the flat swatches alone without it', () => {

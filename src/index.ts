@@ -1,6 +1,6 @@
 export { getOptionPickerContentSize, OptionPicker, type OptionPickerOption } from './OptionPicker'
 export { ProfileChip } from './ProfileChip'
-export { ProfileColorProvider, type ProfileSwatchRenderer, useProfileColorPreview, useProfileDisplayColor, useProfileSwatchRenderer } from './ProfileColorContext'
+export { ProfileColorProvider, type ProfileSwatchPlace, type ProfileSwatchRenderer, useProfileColorPreview, useProfileDisplayColor, useProfileSwatchRenderer } from './ProfileColorContext'
 export { getProfilePickerContentSize, ProfilePicker, type ProfilePickerAlignResult, type ProfilePickerColorSection, type ProfilePickerContentSize } from './ProfilePicker'
 export { type ProfileEditPatch, ProfilesManager, type ProfilesManagerHandle, type ProfilesManagerProps } from './ProfilesManager'
 export { ProfilesScreen, type ProfilesScreenProps } from './ProfilesScreen'

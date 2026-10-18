@@ -8,7 +8,7 @@ import { Icon, Text } from 'react-native-paper'
 
 import { IdentityChip } from './IdentityChip'
 import { useProfileSwatchRenderer } from './ProfileColorContext'
-import { SwatchLayer } from './SwatchLayer'
+import { drawSwatch, SwatchLayer } from './SwatchLayer'
 
 // The trigger and popover ProfilePicker and OptionPicker share: a name trigger (or the chip pill),
 // a bordered menu of rows, and with a `colorSection` a Color row that swaps the menu for a page of
@@ -272,12 +272,13 @@ function ColorRow({ section, fg, dividerColor, onPress }: { section: ProfilePick
   const { value, previewValue, label = 'Color', caption } = section
   const renderSwatch = useProfileSwatchRenderer()
   const drawn = previewValue ? previewValue(value) : value
+  const drawing = drawSwatch(renderSwatch, drawn, COLOR_ROW_SWATCH_SIZE, 'colorRow')
   return (
     <>
       <TouchableRipple onPress={onPress} style={[pickerMenuStyles.row, { height: colorRowHeight(caption) }]} accessibilityRole='button' accessibilityLabel={caption ? `${label}, ${caption}` : label}>
         <View style={pickerMenuStyles.rowInner}>
           {/* A ProfileColorProvider renderSwatch draws it in place of the flat fill. */}
-          <View style={[styles.colorRowSwatch, !renderSwatch && { backgroundColor: drawn }]}>{renderSwatch && <SwatchLayer render={renderSwatch} color={drawn} size={COLOR_ROW_SWATCH_SIZE} />}</View>
+          <View style={[styles.colorRowSwatch, drawing === null && { backgroundColor: drawn }]}>{drawing !== null && <SwatchLayer size={COLOR_ROW_SWATCH_SIZE}>{drawing}</SwatchLayer>}</View>
           <View style={styles.colorRowText}>
             <Text style={[styles.colorRowLabel, { color: fg }]} numberOfLines={1}>
               {label}
@@ -329,15 +330,17 @@ function ColorPage({ section, homeColor, fg, onBack }: { section: ProfilePickerC
           const swatchDisplay = displayFor(swatch.value)
           const contrast = getContrastColor(swatchDisplay)
           const accessibilityLabel = swappable ? `${swatch.label}, swap` : taken ? `${swatch.label}, taken` : isHomeColor ? `${swatch.label}, profile color` : swatch.label
+          const drawnSize = selected ? SWATCH_SIZE - 2 * SWATCH_RING_WIDTH : SWATCH_SIZE
+          const drawing = drawSwatch(renderSwatch, swatchDisplay, drawnSize, 'colorPage')
           const mark = selected ? <Icon source='check' size={16} color={contrast} /> : swappable ? <Icon source='swap-horizontal' size={16} color={contrast} /> : taken ? <Icon source='close' size={16} color={contrast} /> : isHomeColor ? <View style={[styles.homeDot, { backgroundColor: contrast }]} /> : <View />
           // The same swatch as @tastic/hud's InlineColorPicker: a filled circle, the selected one
           // ringed and checked, a taken one faded with an X. TouchableRipple takes one child, so a
           // drawn swatch and its mark share a face that fills the circle inside the ring.
           return (
-            <TouchableRipple key={swatch.value} disabled={taken && !swappable} onPress={() => onChange(swatch.value)} borderless style={[styles.swatch, !renderSwatch && { backgroundColor: swatchDisplay }, selected && styles.swatchSelected, taken && !swappable && styles.swatchTaken]} accessibilityRole='button' accessibilityLabel={accessibilityLabel} accessibilityState={{ selected, disabled: taken && !swappable }}>
-              {renderSwatch ? (
+            <TouchableRipple key={swatch.value} disabled={taken && !swappable} onPress={() => onChange(swatch.value)} borderless style={[styles.swatch, drawing === null && { backgroundColor: swatchDisplay }, selected && styles.swatchSelected, taken && !swappable && styles.swatchTaken]} accessibilityRole='button' accessibilityLabel={accessibilityLabel} accessibilityState={{ selected, disabled: taken && !swappable }}>
+              {drawing !== null ? (
                 <View style={styles.swatchFace}>
-                  <SwatchLayer render={renderSwatch} color={swatchDisplay} size={selected ? SWATCH_SIZE - 2 * SWATCH_RING_WIDTH : SWATCH_SIZE} />
+                  <SwatchLayer size={drawnSize}>{drawing}</SwatchLayer>
                   {mark}
                 </View>
               ) : (

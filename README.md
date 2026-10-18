@@ -310,16 +310,19 @@ untouched. `useProfileColorPreview()` returns the provider's function (or `undef
 
 `renderSwatch` (also optional, with or without `preview`) draws the fill of every round swatch this
 package draws, in place of the flat color: `ProfileChip`, the pickers' chip trigger, the Color row's
-swatch and the color page's swatches. It's called as `renderSwatch(color, size)` with the drawn
-color (after `preview`) and the circle's diameter, and its drawing is clipped to the circle, behind
-the tag, icon or check. The tag and check still take their contrast from `color`, so treat it as
-the primary color of whatever you draw. Hangman draws a pie of each color's triad:
+swatch and the color page's swatches. It's called as `renderSwatch(color, size, place)` with the
+drawn color (after `preview`), the circle's diameter and where the swatch is (`ProfileSwatchPlace`:
+`'chip'`, `'colorRow'` or `'colorPage'`, 0.16.2+), and its drawing is clipped to the circle, behind
+the tag, icon or check. Return `null` (or `undefined`) to keep a swatch's flat fill there. The tag and
+check still take their contrast from `color`, so treat it as the primary color of whatever you draw.
+Hangman draws a pie of each color's triad where colors are chosen, and keeps its chips flat so their
+tags stay legible:
 
 ```tsx
 import { getTriadicPalette } from '@rific/auto-paper'
 import { ProfileColorProvider, type ProfileSwatchRenderer } from '@tastic/profile'
 
-const renderSwatch: ProfileSwatchRenderer = (color, size) => <TriadPie colors={getTriadicPalette(color)} size={size} />
+const renderSwatch: ProfileSwatchRenderer = (color, size, place) => (place === 'chip' ? null : <TriadPie colors={getTriadicPalette(color)} size={size} />)
 <ProfileColorProvider renderSwatch={renderSwatch}>{children}</ProfileColorProvider>
 ```
 

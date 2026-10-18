@@ -1,4 +1,5 @@
 import { render } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
 
@@ -12,7 +13,7 @@ import { getContrastColor } from '@rific/auto-paper'
 
 import { IdentityChip } from '../IdentityChip'
 import { ProfileChip } from '../ProfileChip'
-import { ProfileColorProvider, useProfileColorPreview, useProfileSwatchRenderer } from '../ProfileColorContext'
+import { ProfileColorProvider, type ProfileSwatchPlace, useProfileColorPreview, useProfileSwatchRenderer } from '../ProfileColorContext'
 
 const mockView = View as unknown as jest.Mock
 const mockIcon = Icon as jest.MockedFunction<typeof Icon>
@@ -141,7 +142,8 @@ describe('ProfileChip', () => {
 
   describe("ProfileColorProvider's renderSwatch", () => {
     // Stands in for a host's drawing (Hangman's pie of the color's triad); its calls are what was drawn.
-    const renderSwatch = jest.fn((_color: string, _size: number) => null)
+    // Anything but null or undefined counts as drawn.
+    const renderSwatch = jest.fn((_color: string, _size: number, _place: ProfileSwatchPlace): ReactNode => true)
     // The clip SwatchLayer draws it in: the second View, after the chip's own.
     const layerProps = () => mockView.mock.calls[1]?.[0] as { style: object[]; children?: unknown } | undefined
 
@@ -153,7 +155,7 @@ describe('ProfileChip', () => {
       )
       expect(chipStyle()).not.toContainEqual({ backgroundColor: '#2196f3' })
       expect(renderSwatch).toHaveBeenCalledTimes(1)
-      expect(renderSwatch).toHaveBeenCalledWith('#2196f3', 30)
+      expect(renderSwatch).toHaveBeenCalledWith('#2196f3', 30, 'chip')
       expect(layerProps()?.style).toEqual(expect.arrayContaining([expect.objectContaining({ position: 'absolute', overflow: 'hidden', top: 0, left: 0 }), { borderRadius: 15, height: 30, width: 30 }]))
       // The tag is still drawn on top, with its contrast taken from the primary color.
       expect(mockText.mock.calls[0][0].children).toBe('J')
@@ -166,8 +168,22 @@ describe('ProfileChip', () => {
           <ProfileChip profile={{ ...PROFILE, color: '#2196f3', tag: 'J' }} />
         </ProfileColorProvider>
       )
-      expect(renderSwatch).toHaveBeenCalledWith('#000000', 22)
+      expect(renderSwatch).toHaveBeenCalledWith('#000000', 22, 'chip')
       expect(textStyle()).toContainEqual(expect.objectContaining({ color: '#ffffff' }))
+    })
+
+    // A host can keep a chip flat (Hangman: a legible mark on one color) and draw only where colors are
+    // chosen.
+    it('keeps the flat fill where the renderer returns null', () => {
+      const onlyColorPages = jest.fn((_color: string, _size: number, place: ProfileSwatchPlace): ReactNode => (place === 'colorPage' ? true : null))
+      render(
+        <ProfileColorProvider renderSwatch={onlyColorPages}>
+          <ProfileChip profile={{ ...PROFILE, color: '#2196f3', tag: 'J' }} size={30} />
+        </ProfileColorProvider>
+      )
+      expect(onlyColorPages).toHaveBeenCalledWith('#2196f3', 30, 'chip')
+      expect(chipStyle()).toContainEqual({ backgroundColor: '#2196f3' })
+      expect(layerProps()).toBeUndefined()
     })
 
     it('draws nothing for an unfilled chip', () => {
@@ -186,7 +202,7 @@ describe('ProfileChip', () => {
           <IdentityChip color='#ffffff' icon='robot' size={32} />
         </ProfileColorProvider>
       )
-      expect(renderSwatch).toHaveBeenCalledWith('#ffffff', 32)
+      expect(renderSwatch).toHaveBeenCalledWith('#ffffff', 32, 'chip')
       expect(mockIcon.mock.calls[0][0]).toMatchObject({ source: 'robot', color: '#000000' })
     })
 
@@ -203,7 +219,7 @@ describe('ProfileChip', () => {
           <Probe />
         </ProfileColorProvider>
       )
-      expect(renderSwatch).toHaveBeenCalledWith('#2196f3', 22)
+      expect(renderSwatch).toHaveBeenCalledWith('#2196f3', 22, 'chip')
       expect(seen).toEqual({ preview: undefined, renderSwatch })
     })
 
