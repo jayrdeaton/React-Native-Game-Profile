@@ -7,6 +7,10 @@ export interface OptionPickerOption<T extends string> {
   value: T
   label: string
   icon?: string
+  // The option's own color (e.g. a difficulty's), for its row's icon while the row isn't the selected
+  // one; the selected row still fills with the picker's `color`, its icon contrasting as always.
+  // Without it the icon takes the row's text color.
+  color?: string
 }
 
 // The popover's content footprint: one row per option, plus (with a `colorSection`) the Color row,
@@ -57,7 +61,7 @@ export function OptionPicker<T extends string>({ id, host, options, value, onCha
   return (
     <PickerMenu id={id} host={host} color={color} dark={dark} label={selected?.label ?? ''} chip={{ icon }} colorSection={colorSection} contentSize={getOptionPickerContentSize(options.length, colorSection)} align={align} alignOverride={alignOverride} rotation={rotation} triggerStyle={triggerStyle}>
       {options.map((option) => (
-        <IconRow key={option.value} icon={option.icon ?? rowIcon} label={option.label} selected={option.value === value} color={color} fg={fg} onPress={() => handleSelect(option)} />
+        <IconRow key={option.value} icon={option.icon ?? rowIcon} iconColor={option.color} label={option.label} selected={option.value === value} color={color} fg={fg} onPress={() => handleSelect(option)} />
       ))}
     </PickerMenu>
   )

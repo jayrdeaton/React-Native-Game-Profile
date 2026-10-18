@@ -99,6 +99,22 @@ describe('OptionPicker', () => {
     expect(mockTouchableRipple.mock.calls[2][0].style).not.toContainEqual({ backgroundColor: '#123456' })
   })
 
+  // A difficulty's own color on its row's icon, until that row is the selected one (filled with the
+  // picker's color, its icon contrasting like the label).
+  it("draws an option's own color on its row icon until it's selected", () => {
+    const colored: OptionPickerOption<Level>[] = [
+      { value: 'easy', label: 'Garter', icon: 'emoticon-happy-outline', color: '#00AA00' },
+      { value: 'normal', label: 'Rattler', color: '#AAAA00' },
+      { value: 'hard', label: 'King Cobra', icon: 'fire' }
+    ]
+    render(<OptionPicker id={ID} host={makeHost(ID)} options={colored} value='normal' onChange={jest.fn()} color='#123456' dark icon='robot' />)
+    const rowIconColors = mockIcon.mock.calls
+      .map((call) => call[0] as { source: string; color: string })
+      .filter((props) => props.source !== 'menu-down')
+      .map((props) => props.color)
+    expect(rowIconColors).toEqual(['#00AA00', 'contrast(#123456)', '#FFFFFF'])
+  })
+
   it('commits the option and closes the dropdown on a row press', () => {
     const { host, onChange } = renderPicker({ host: makeHost(ID) })
     act(() => (mockTouchableRipple.mock.calls[3][0] as { onPress: () => void }).onPress())

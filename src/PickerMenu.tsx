@@ -231,6 +231,9 @@ export function PickerMenu({ id, host, color, dark, label, chip, colorSection, h
 
 interface IconRowProps {
   icon: string
+  // The icon's color while the row isn't selected (an OptionPicker option's own `color`). Defaults to
+  // `fg`, like the label.
+  iconColor?: string
   label: string
   // Fills the row with `color` (its icon and label then contrast against it).
   selected: boolean
@@ -244,7 +247,7 @@ interface IconRowProps {
 // A selected row's own background fills entirely with its identity color - matching how a selected
 // row reads elsewhere (see @tastic/hud's SectionedDropdown) rather than a checkmark bolted onto an
 // otherwise-plain row.
-export function IconRow({ icon, label, selected, color, fg, disabled = false, onPress }: IconRowProps) {
+export function IconRow({ icon, iconColor, label, selected, color, fg, disabled = false, onPress }: IconRowProps) {
   const textColor = selected ? getContrastColor(color) : fg
   return (
     <TouchableRipple disabled={disabled} onPress={onPress} style={[pickerMenuStyles.row, selected && { backgroundColor: color }]}>
@@ -253,7 +256,7 @@ export function IconRow({ icon, label, selected, color, fg, disabled = false, on
         circle, but still the same fixed-size slot every row's icon/chip sits in (see ProfileChip's
         own doc), so this row's icon stays lined up with every other row regardless of selection. */}
         <View style={styles.iconSlot}>
-          <Icon source={icon} size={13} color={textColor} />
+          <Icon source={icon} size={13} color={selected ? textColor : (iconColor ?? textColor)} />
         </View>
         <Text style={[pickerMenuStyles.rowLabel, { color: textColor }]} numberOfLines={1}>
           {label}
