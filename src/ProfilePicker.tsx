@@ -100,7 +100,8 @@ interface ProfilePickerProps<P extends Profile> {
   // exactly as before.
   colorSection?: ProfilePickerColorSection
   // Extra style for the trigger (its pressable box) - e.g. a background behind the chip trigger's
-  // pill. The chip trigger already pads itself and rounds into a pill.
+  // pill. The chip trigger already pads itself and rounds into a pill. A `flexShrink` here lets the
+  // trigger give way in a row too narrow for it, cutting its label off (see PickerMenu).
   triggerStyle?: StyleProp<ViewStyle>
 }
 

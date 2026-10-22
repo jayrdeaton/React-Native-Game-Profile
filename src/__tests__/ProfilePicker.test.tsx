@@ -505,6 +505,79 @@ describe('ProfilePicker', () => {
       }
     })
   })
+  // A host's flexShrink in triggerStyle (Solitaire's two Stats screen pills, side by side on a narrow
+  // phone): the anchor, the host's flex item, takes it and stops at the trigger's fixed parts, and the
+  // pressable is capped at the anchor's width, so the label is cut off instead of the row overflowing.
+  describe('a trigger that shrinks (flexShrink in triggerStyle)', () => {
+    const chipSection = (): ProfilePickerColorSection => ({ value: '#000003', onChange: jest.fn() })
+    const flat = (style: unknown): Record<string, unknown> => Object.assign({}, ...[style].flat(Infinity).filter(Boolean))
+    // The View the host lays out (the position:'relative' anchor; the chip trigger's caret width comes
+    // from its onLayout), the pressable, and the measured row inside it.
+    const anchorProps = () => mockView.mock.calls.map((call) => call[0] as { onLayout?: (e: unknown) => void; style?: unknown }).find((props) => flat(props.style).position === 'relative')!
+    const pressableStyle = () => styleOf(mockTouchableRipple.mock.calls[0])
+    const innerStyle = () => flat((mockView.mock.calls.find((call) => (call[0] as { collapsable?: boolean }).collapsable === false)![0] as { style?: unknown }).style)
+
+    it('changes nothing without a flexShrink: the host style goes on the pressable as given, uncapped', () => {
+      const pill = { backgroundColor: '#eeeeee', borderRadius: 999 }
+      renderPicker({ colorSection: chipSection(), triggerStyle: pill })
+      expect(pressableStyle()).toContain(pill)
+      expect(flat(pressableStyle()).maxWidth).toBeUndefined()
+      expect(flat(anchorProps().style)).not.toHaveProperty('flexShrink')
+      expect(flat(anchorProps().style)).not.toHaveProperty('minWidth')
+    })
+
+    it("moves the flexShrink to the anchor, down to the chip pill's fixed parts, and caps the pressable at the anchor's width", () => {
+      renderPicker({ colorSection: chipSection(), triggerStyle: [{ backgroundColor: '#eeeeee', borderRadius: 999 }, { flexShrink: 1 }] })
+      expect(flat(anchorProps().style)).toMatchObject({ flexShrink: 1, minWidth: 84 })
+      const pressable = flat(pressableStyle())
+      expect(pressable).toMatchObject({ backgroundColor: '#eeeeee', borderRadius: 999, maxWidth: '100%' })
+      // On the pressable it would only squeeze the pill's height.
+      expect(pressable).not.toHaveProperty('flexShrink')
+    })
+
+    it('stops at exactly what the pill holds besides its label: padding, chip, gaps and chevron', () => {
+      renderPicker({ colorSection: chipSection(), triggerStyle: { flexShrink: 1 } })
+      const inner = innerStyle() as { paddingLeft: number; paddingRight: number; gap: number }
+      const chip = (mockIdentityChip.mock.calls[0][0] as { size: number }).size
+      const chevron = (mockIcon.mock.calls.find((call) => (call[0] as { source?: string }).source === 'menu-down')![0] as { size: number }).size
+      expect(flat(anchorProps().style).minWidth).toBe(inner.paddingLeft + chip + 2 * inner.gap + chevron + inner.paddingRight)
+    })
+
+    it('stops the plain name trigger at its chevron and gap', () => {
+      renderPicker({ triggerStyle: { flexShrink: 1 } })
+      expect(flat(anchorProps().style)).toMatchObject({ flexShrink: 1, minWidth: 18 })
+      expect(flat(pressableStyle()).maxWidth).toBe('100%')
+    })
+
+    it("leaves a host's own maxWidth in charge of the pressable", () => {
+      renderPicker({ colorSection: chipSection(), triggerStyle: { flexShrink: 1, maxWidth: 200 } })
+      expect(flat(pressableStyle()).maxWidth).toBe(200)
+    })
+
+    it('ignores a flexShrink of 0', () => {
+      renderPicker({ colorSection: chipSection(), triggerStyle: { flexShrink: 0 } })
+      expect(flat(anchorProps().style)).not.toHaveProperty('minWidth')
+      expect(flat(pressableStyle()).maxWidth).toBeUndefined()
+    })
+
+    it('lets the label give way while the chip and chevron keep their size', () => {
+      renderPicker({ colorSection: chipSection(), triggerStyle: { flexShrink: 1 } })
+      expect(flat(styleOf(mockText.mock.calls[0]))).toMatchObject({ flexShrink: 1, minWidth: 0 })
+      expect(mockText.mock.calls[0][0]).toMatchObject({ numberOfLines: 1 })
+      expect(mockIdentityChip).toHaveBeenCalledWith(expect.objectContaining({ size: 32 }), undefined)
+      expect(findIcon('menu-down')).toMatchObject({ size: 16 })
+    })
+
+    it('measures the shrunk pill for the placement, and points the caret at its middle', () => {
+      renderPicker({ host: makeHost(TRIGGER_ID), colorSection: chipSection(), triggerStyle: { flexShrink: 1 } })
+      // The placement still measures the inner view, which fills the pressable at whatever width it has.
+      const autoRef = (mockUseAutoAlign.mock.results[0].value as ProfilePickerAlignResult).triggerRef
+      expect(triggerViewProps().ref).toBe(autoRef)
+      act(() => anchorProps().onLayout!({ nativeEvent: { layout: { width: 121, height: 44 } } }))
+      expect(mockPopoverBody.mock.calls[mockPopoverBody.mock.calls.length - 1][0]).toMatchObject({ triggerSize: 121 })
+    })
+  })
+
   describe('colorSection', () => {
     const SWATCH = (i: number) => `#0000${i.toString(16).padStart(2, '0')}`
     const section = (overrides: Partial<ProfilePickerColorSection> = {}): ProfilePickerColorSection => ({ value: SWATCH(3), onChange: jest.fn(), ...overrides })

@@ -2,15 +2,15 @@ import { defaultColors, FadingScrollView, useAutoPaperTheme } from '@rific/auto-
 import { TouchableRipple } from '@rific/feedback-press'
 import { useFocusChain } from '@rific/focus-chain'
 import { useToast } from '@rific/toaster'
-import type { PopoverHost } from '@tastic/hud/chrome'
+import type { InlineColorPickerSwatchRenderer, PopoverHost, ViewInstance } from '@tastic/hud/chrome'
 import { ConfirmDialog, getInlineColorPickerContentSize, InlineColorPicker, usePopoverHost } from '@tastic/hud/chrome'
-import { ComponentProps, ReactNode, Ref, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { ComponentProps, ReactNode, Ref, RefObject, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { KeyboardAvoidingView, Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Icon, Text, TextInput } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ProfileChip } from './ProfileChip'
-import { useProfileColorPreview } from './ProfileColorContext'
+import { type ProfileSwatchRenderer, useProfileColorPreview, useProfileSwatchRenderer } from './ProfileColorContext'
 import { type ProfilePickerAlignResult } from './ProfilePicker'
 import { clampTag, isValidTag, MAX_PROFILE_NAME_LENGTH } from './profilesValidation'
 import { Profile } from './types'
@@ -88,11 +88,20 @@ export interface ProfilesManagerProps {
   // measured). It is a hook, not a plain function: give it a STABLE identity for the life of the mount (a
   // module-level function) - switching it at runtime remounts the swatch. Omit for the ordinary case;
   // behaviour is then identical to before. Needs @tastic/hud >= 0.12.0 to have any effect (older hud has no
-  // `alignOverride` and ignores it).
-  useColorPickerAlign?: (open: boolean, contentWidth: number, contentHeight: number) => ProfilePickerAlignResult
+  // `alignOverride` and ignores it). Its fourth argument, `column`, is the roster's scroll view: the popover
+  // opens inside it and is clipped at its edges, so where it's narrower than the frame (a column capped in a
+  // wide window) the placement should keep the popover inside it. A hook that measures it never has to be
+  // told the column's width. A hook that ignores it behaves as before.
+  useColorPickerAlign?: (open: boolean, contentWidth: number, contentHeight: number, column: RefObject<ViewInstance | null>) => ProfilePickerAlignResult
 }
 
 type Row = { kind: 'profile'; profile: Profile } | { kind: 'new' }
+
+// A focus-chain ref as a Paper TextInput takes it. Paper types its input's handle as
+// Pick<TextInput, 'focus' | ...>, which React Native 0.88's strict types read as `focus: unknown`
+// (TextInput is a function there, not a class), so focus-chain's ref, which wants `focus(): void`,
+// no longer fits the prop. The handle does have focus() at run time.
+const textInputRef = (ref: (el: { focus: () => void } | null) => void) => ref as (el: unknown) => void
 
 // First letter of the name, uppercased - the tag's own default for as long as it hasn't been typed
 // into directly (see the tagManuallySet state below). Empty name -> empty tag, same as typing
@@ -120,6 +129,11 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
   const { dark } = useAutoPaperTheme()
   const insets = useSafeAreaInsets()
   const { error: showErrorToast } = useToast()
+  // The roster's scroll view, which clips the color popover: the color picker keeps its popover
+  // inside it (InlineColorPicker's `bounds`), and a host's useColorPickerAlign is handed it.
+  const columnRef = useRef<ViewInstance>(null)
+  // ProfileColorProvider's swatch renderer, for the color picker's trigger and swatches.
+  const renderSwatch = useProfileSwatchRenderer()
   // Only one row is ever in edit mode at a time (see commitEdit, called before any new row opens),
   // so every EditRow instance can safely share this one host instead of each needing its own.
   const host = usePopoverHost()
@@ -247,46 +261,50 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
       fade out at an edge while there is more past it, the same cue as the Settings sheet and the
       Achievements screen (Jay, 2026-10-16: every scrolling screen alike). */}
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.keyboardAvoiding}>
-        <FadingScrollView style={styles.scrollView} contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps='handled'>
-          {rows.map((row) => {
-            if (row.kind === 'new') {
-              if (editingId !== 'new') {
-                return (
-                  <TouchableRipple key='new' onPress={() => startEdit('new')} style={styles.row}>
-                    <View style={styles.rowInner}>
-                      <View style={[styles.rowChip, styles.newChip, { borderColor: fg }]}>
-                        <Icon source='plus' size={20} color={fg} />
+        {/* A plain View around the scroll view, the same size, for the column the color popover
+        is kept inside (see columnRef): the scroll view takes no ref. */}
+        <View ref={columnRef} collapsable={false} style={styles.column}>
+          <FadingScrollView style={styles.scrollView} contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps='handled'>
+            {rows.map((row) => {
+              if (row.kind === 'new') {
+                if (editingId !== 'new') {
+                  return (
+                    <TouchableRipple key='new' onPress={() => startEdit('new')} style={styles.row}>
+                      <View style={styles.rowInner}>
+                        <View style={[styles.rowChip, styles.newChip, { borderColor: fg }]}>
+                          <Icon source='plus' size={20} color={fg} />
+                        </View>
+                        <Text variant='bodyLarge' style={{ color: fg }}>
+                          New Profile
+                        </Text>
                       </View>
-                      <Text variant='bodyLarge' style={{ color: fg }}>
-                        New Profile
-                      </Text>
-                    </View>
-                  </TouchableRipple>
-                )
+                    </TouchableRipple>
+                  )
+                }
+                return <EditRow key='new' draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} autoFocus fgMuted={fgMuted} host={host} dark={dark} colorPreview={colorPreview} useColorPickerAlign={useColorPickerAlign} column={columnRef} renderSwatch={renderSwatch} />
               }
-              return <EditRow key='new' draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} autoFocus fgMuted={fgMuted} host={host} dark={dark} colorPreview={colorPreview} useColorPickerAlign={useColorPickerAlign} />
-            }
 
-            const { profile } = row
-            if (editingId === profile.id) {
-              return <EditRow key={profile.id} draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} onDelete={() => setConfirmDeleteId(profile.id)} fgMuted={fgMuted} host={host} dark={dark} colorPreview={colorPreview} useColorPickerAlign={useColorPickerAlign} />
-            }
+              const { profile } = row
+              if (editingId === profile.id) {
+                return <EditRow key={profile.id} draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} onDelete={() => setConfirmDeleteId(profile.id)} fgMuted={fgMuted} host={host} dark={dark} colorPreview={colorPreview} useColorPickerAlign={useColorPickerAlign} column={columnRef} renderSwatch={renderSwatch} />
+              }
 
-            // No delete affordance at rest - tap the row to start editing, which is the one place
-            // delete shows (see EditRow): a deliberate extra step before a destructive action is
-            // even reachable, not just before it's confirmed.
-            return (
-              <TouchableRipple key={profile.id} onPress={() => startEdit(profile)} style={styles.row}>
-                <View style={styles.rowInner}>
-                  <ProfileChip profile={profile} size={CHIP_SIZE} />
-                  <Text variant='bodyLarge' style={[styles.rowName, { color: fg }]} numberOfLines={1}>
-                    {profile.name}
-                  </Text>
-                </View>
-              </TouchableRipple>
-            )
-          })}
-        </FadingScrollView>
+              // No delete affordance at rest - tap the row to start editing, which is the one place
+              // delete shows (see EditRow): a deliberate extra step before a destructive action is
+              // even reachable, not just before it's confirmed.
+              return (
+                <TouchableRipple key={profile.id} onPress={() => startEdit(profile)} style={styles.row}>
+                  <View style={styles.rowInner}>
+                    <ProfileChip profile={profile} size={CHIP_SIZE} />
+                    <Text variant='bodyLarge' style={[styles.rowName, { color: fg }]} numberOfLines={1}>
+                      {profile.name}
+                    </Text>
+                  </View>
+                </TouchableRipple>
+              )
+            })}
+          </FadingScrollView>
+        </View>
       </KeyboardAvoidingView>
 
       {/* hud's ConfirmDialog, the one confirm card every app in the fleet uses, so this reads like the
@@ -314,6 +332,8 @@ interface EditRowProps {
   dark: boolean
   colorPreview?: (hex: string) => string
   useColorPickerAlign?: ProfilesManagerProps['useColorPickerAlign']
+  column: RefObject<ViewInstance | null>
+  renderSwatch?: ProfileSwatchRenderer
 }
 
 // InlineColorPicker with its placement supplied by a host hook (see ProfilesManagerProps.useColorPickerAlign).
@@ -321,10 +341,10 @@ interface EditRowProps {
 // unconditionally here, and the plain path below stays byte-identical to what it was. Sized exactly as
 // InlineColorPicker sizes itself (the default swatch list at the raw window width), so the host's placement and
 // the popover it positions agree on its footprint.
-function AlignedColorPicker({ useAlign, ...props }: ComponentProps<typeof InlineColorPicker> & { useAlign: NonNullable<ProfilesManagerProps['useColorPickerAlign']> }) {
+function AlignedColorPicker({ useAlign, column, ...props }: ComponentProps<typeof InlineColorPicker> & { useAlign: NonNullable<ProfilesManagerProps['useColorPickerAlign']>; column: EditRowProps['column'] }) {
   const { width: windowWidth } = useWindowDimensions()
   const { width, height } = getInlineColorPickerContentSize(defaultColors.length, windowWidth)
-  const alignOverride = useAlign(props.host.openId === props.id, width, height)
+  const alignOverride = useAlign(props.host.openId === props.id, width, height, column)
   return <InlineColorPicker {...props} alignOverride={alignOverride} />
 }
 
@@ -340,7 +360,11 @@ function AlignedColorPicker({ useAlign, ...props }: ComponentProps<typeof Inline
 // own - submitting the *name* field is what actually commits the row, so its registration's own
 // onSubmitEditing (a no-op - it's last in the chain) is overridden with onSubmit below, matching
 // how a normal multi-field form reads: fill fields in order, the last one finishes it.
-function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag, onTagChange, onSubmit, onDelete, autoFocus, fgMuted, host, dark, colorPreview, useColorPickerAlign }: EditRowProps) {
+function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag, onTagChange, onSubmit, onDelete, autoFocus, fgMuted, host, dark, colorPreview, useColorPickerAlign, column, renderSwatch }: EditRowProps) {
+  // ProfileColorProvider's renderer in the color picker: its trigger is the profile's color with its
+  // tag on it, an identity like a chip, and its grid is where a color is chosen, like a picker's color
+  // page (Hangman draws its triad pies on the grid only).
+  const pickerSwatch = useMemo<InlineColorPickerSwatchRenderer | undefined>(() => (renderSwatch ? (color, size, place) => renderSwatch(color, size, place === 'trigger' ? 'chip' : 'colorPage') : undefined), [renderSwatch])
   const register = useFocusChain()
   const tag = register()
   const name = register()
@@ -367,7 +391,7 @@ function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag,
 
   return (
     <View style={styles.editRow}>
-      {useColorPickerAlign ? <AlignedColorPicker useAlign={useColorPickerAlign} id='color' host={host} value={draftColor} onChange={onColorChange} previewValue={colorPreview} tag={draftTag} dark={dark} /> : <InlineColorPicker id='color' host={host} value={draftColor} onChange={onColorChange} previewValue={colorPreview} tag={draftTag} dark={dark} />}
+      {useColorPickerAlign ? <AlignedColorPicker useAlign={useColorPickerAlign} column={column} id='color' host={host} value={draftColor} onChange={onColorChange} previewValue={colorPreview} tag={draftTag} dark={dark} renderSwatch={pickerSwatch} /> : <InlineColorPicker id='color' host={host} value={draftColor} onChange={onColorChange} previewValue={colorPreview} tag={draftTag} dark={dark} renderSwatch={pickerSwatch} bounds={column} />}
       {/* Invisible on purpose (styles.hiddenTagInput: zero footprint, position: 'absolute' so it
       doesn't reserve space in the row's own flex layout) - the swatch above is the only place this
       value is ever meant to be seen. pointerEvents='none' is what actually keeps it out of the
@@ -379,12 +403,10 @@ function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag,
       find it as "Tag" the same way they find the Name field by its placeholder. selectTextOnFocus
       so re-tapping the swatch to revise an already-set tag replaces it wholesale rather than
       inserting mid-string. */}
-      {/* eslint-disable-next-line react-hooks/refs -- tag.ref/tag.props come from useFocusChain's
-      register(), called during render by design (see the hook's own doc); the actual DOM/native
-      focus() call it wraps only ever fires later, from an event handler, never synchronously here */}
-      <TextInput ref={tag.ref} {...tag.props} value={draftTag} onChangeText={onTagChange} accessibilityLabel='Tag' autoCapitalize='characters' selectTextOnFocus returnKeyType='next' style={styles.hiddenTagInput} pointerEvents='none' />
-      {/* eslint-disable-next-line react-hooks/refs -- see the tag field's identical note above */}
-      <TextInput ref={name.ref} {...name.props} onSubmitEditing={onSubmit} mode='outlined' dense value={draftName} onChangeText={onNameChange} maxLength={MAX_PROFILE_NAME_LENGTH} placeholder='Name' autoFocus={autoFocus} returnKeyType='done' style={styles.nameInput} />
+      {}
+      <TextInput ref={textInputRef(tag.ref)} {...tag.props} value={draftTag} onChangeText={onTagChange} accessibilityLabel='Tag' autoCapitalize='characters' selectTextOnFocus returnKeyType='next' style={styles.hiddenTagInput} pointerEvents='none' />
+      {}
+      <TextInput ref={textInputRef(name.ref)} {...name.props} onSubmitEditing={onSubmit} mode='outlined' dense value={draftName} onChangeText={onNameChange} maxLength={MAX_PROFILE_NAME_LENGTH} placeholder='Name' autoFocus={autoFocus} returnKeyType='done' style={styles.nameInput} />
       {onDelete && (
         <TouchableRipple onPress={onDelete} style={styles.iconButton}>
           <Icon source='trash-can-outline' size={18} color={fgMuted} />
@@ -395,6 +417,10 @@ function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag,
 }
 
 const styles = StyleSheet.create({
+  // The roster's column, around the scroll view (see columnRef).
+  column: {
+    flex: 1
+  },
   content: {
     gap: 4,
     paddingHorizontal: 20

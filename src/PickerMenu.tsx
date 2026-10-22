@@ -1,6 +1,6 @@
 import { defaultColors, FadingScrollView, getContrastColor, type SeedColor } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
-import type { PopoverHost, PopoverRotation } from '@tastic/hud/chrome'
+import type { PopoverHost, PopoverRotation, ViewInstance } from '@tastic/hud/chrome'
 import { PopoverBody, useAutoAlign } from '@tastic/hud/chrome'
 import { ReactNode, RefObject, useState } from 'react'
 import { type LayoutChangeEvent, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native'
@@ -25,6 +25,15 @@ const ROW_INSET = 12
 // The chip trigger (see `colorSection`): a CHIP_SIZE circle inside a pill padded by CHIP_TRIGGER_PADDING.
 const CHIP_SIZE = 32
 const CHIP_TRIGGER_PADDING = 6
+const CHIP_TRIGGER_END_PADDING = CHIP_TRIGGER_PADDING + 8
+const CHIP_TRIGGER_GAP = 8
+const PLAIN_TRIGGER_GAP = 2
+const CHEVRON_SIZE = 16
+// Everything in a trigger but its label: the chip, the chevron, the gaps and the padding (84pt for the
+// chip pill, 18 for the plain trigger). A shrinking trigger (see `triggerStyle`) stops here, so its
+// chip and chevron always fit inside it.
+const CHIP_TRIGGER_FIXED_WIDTH = CHIP_TRIGGER_PADDING + CHIP_SIZE + 2 * CHIP_TRIGGER_GAP + CHEVRON_SIZE + CHIP_TRIGGER_END_PADDING
+const PLAIN_TRIGGER_FIXED_WIDTH = PLAIN_TRIGGER_GAP + CHEVRON_SIZE
 
 // The color row and page (see `colorSection`). Every height here is fixed (explicit line heights),
 // so pickerContentSize can size them exactly. Swatches are the same 28pt circles as
@@ -74,16 +83,16 @@ export interface ProfilePickerColorSection {
 
 // A complete placement decision for the popover: which way it opens, how tall it may grow, whether
 // this open's measurement has landed yet, and the ref attached to the measured trigger.
-// Structurally identical to @tastic/hud's own `AlignResult` (exported from hud >= 0.12.0, and the
-// same shape `useAutoAlign` itself returns) - declared here rather than imported so this package's
-// public types don't start requiring a newer @tastic/hud than its peer range already admits. A
-// hud `AlignResult` (e.g. from `useZoneClampedAlign`) is assignable to this as-is.
+// Structurally identical to @tastic/hud's own `AlignResult` (the same shape `useAutoAlign` itself
+// returns), and a hud `AlignResult` (e.g. from `useZoneClampedAlign`) is assignable to this as-is.
+// The ref holds hud's `ViewInstance`, a View's instance under React Native's legacy types and its
+// strict ones alike (a bare `RefObject<View>` is a ref to the View function under the strict ones).
 export interface ProfilePickerAlignResult {
   align: 'left' | 'right' | 'center'
   verticalAlign: 'below' | 'above'
   maxHeight: number
   measured: boolean
-  triggerRef: RefObject<View | null>
+  triggerRef: RefObject<ViewInstance | null>
 }
 
 export interface ProfilePickerContentSize {
@@ -134,6 +143,8 @@ interface PickerMenuProps {
   align?: 'left' | 'right' | 'center'
   alignOverride?: ProfilePickerAlignResult
   rotation: PopoverRotation
+  // The pressable trigger's own style (a host's background behind the pill). A `flexShrink` in it lets
+  // the trigger give way in the host's row: see `shrinks` below.
   triggerStyle?: StyleProp<ViewStyle>
   // Pinned under the list page's rows, behind a divider (ProfilePicker's Manage row).
   footer?: ReactNode
@@ -172,9 +183,21 @@ export function PickerMenu({ id, host, color, dark, label, chip, colorSection, h
   // Shown on the list page only (see the footer below).
   const showFooter = !!footer && !showColorPage
 
+  // A host's `flexShrink` is how far the trigger gives way in the host's row, so it goes on the anchor,
+  // which is the host's flex item (on the pressable it would only squeeze the pill's height), down to
+  // the trigger's fixed parts. The pressable is then capped at the anchor's width, so its label is cut
+  // off with an ellipsis and the chip and chevron keep their size. With room, the anchor and the pill
+  // are their natural width, as before. The pill's edges, and so the measured trigger, the caret and
+  // the popover's alignment, follow the shrunk width. Without a flexShrink nothing here changes.
+  const flatTriggerStyle: ViewStyle = StyleSheet.flatten(triggerStyle) ?? {}
+  const { flexShrink, ...pillStyle } = flatTriggerStyle
+  const shrinks = typeof flexShrink === 'number' && flexShrink > 0
+  const anchorShrink = shrinks ? { flexShrink, minWidth: chipTrigger ? CHIP_TRIGGER_FIXED_WIDTH : PLAIN_TRIGGER_FIXED_WIDTH } : undefined
+
   return (
-    <View style={[styles.anchor, open && styles.anchorOpen]} onLayout={handleAnchorLayout}>
-      <TouchableRipple onPress={handleTriggerPress} borderless={chipTrigger} style={[styles.trigger, chipTrigger && styles.chipTrigger, triggerStyle]} accessibilityRole='button' accessibilityLabel={triggerLabel}>
+    <View style={[styles.anchor, anchorShrink, open && styles.anchorOpen]} onLayout={handleAnchorLayout}>
+      {/* The cap goes before the host's style, so a host's own maxWidth still wins. */}
+      <TouchableRipple onPress={handleTriggerPress} borderless={chipTrigger} style={[styles.trigger, chipTrigger && styles.chipTrigger, shrinks && styles.triggerShrinks, shrinks ? pillStyle : triggerStyle]} accessibilityRole='button' accessibilityLabel={triggerLabel}>
         <View ref={triggerRef} collapsable={false} style={chipTrigger ? styles.chipTriggerInner : styles.triggerInner}>
           {chip && <IdentityChip color={color} tag={chip.tag} icon={chip.icon} size={CHIP_SIZE} />}
           {/* The chip trigger's name and chevron are plain fg: the chip carries the color, and a muted
@@ -183,7 +206,7 @@ export function PickerMenu({ id, host, color, dark, label, chip, colorSection, h
           <Text style={[styles.triggerLabel, { color: chipTrigger ? fg : color }]} numberOfLines={1}>
             {triggerLabel}
           </Text>
-          <Icon source='menu-down' size={16} color={chipTrigger ? fg : color} />
+          <Icon source='menu-down' size={CHEVRON_SIZE} color={chipTrigger ? fg : color} />
         </View>
       </TouchableRipple>
 
@@ -395,10 +418,10 @@ const styles = StyleSheet.create({
   chipTriggerInner: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 8,
+    gap: CHIP_TRIGGER_GAP,
     height: CHIP_SIZE + 2 * CHIP_TRIGGER_PADDING,
     paddingLeft: CHIP_TRIGGER_PADDING,
-    paddingRight: CHIP_TRIGGER_PADDING + 8
+    paddingRight: CHIP_TRIGGER_END_PADDING
   },
   colorRowCaption: {
     fontSize: 12,
@@ -507,12 +530,21 @@ const styles = StyleSheet.create({
   triggerInner: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 2,
+    gap: PLAIN_TRIGGER_GAP,
     height: TRIGGER_HEIGHT
   },
+  // Lets the label, alone in its row, give way to a trigger narrower than its name (see `shrinks`).
+  // With room it keeps its natural width, so this changes nothing there.
   triggerLabel: {
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 1
+    letterSpacing: 1,
+    minWidth: 0
+  },
+  // A shrinking trigger (see `shrinks`): no wider than its anchor. Its row is then laid out at that
+  // width, which is what cuts the label off.
+  triggerShrinks: {
+    maxWidth: '100%'
   }
 })

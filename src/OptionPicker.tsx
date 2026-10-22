@@ -41,6 +41,8 @@ interface OptionPickerProps<T extends string> {
   align?: 'left' | 'right' | 'center'
   alignOverride?: ProfilePickerAlignResult
   rotation?: PopoverRotation
+  // The pill's own style (a background), as ProfilePicker's; a `flexShrink` lets it give way in a
+  // narrow row, cutting its label off.
   triggerStyle?: StyleProp<ViewStyle>
 }
 

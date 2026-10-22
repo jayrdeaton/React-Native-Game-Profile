@@ -122,15 +122,45 @@ export async function loadSharedProfiles(groupId: string): Promise<Profile[]> {
   return (await readSharedProfiles(groupId)) ?? []
 }
 
+const hasId = (entry: unknown): entry is { id: string } => typeof entry === 'object' && entry !== null && typeof (entry as { id?: unknown }).id === 'string' && (entry as { id: string }).id !== ''
+
+// The stored roster's entries this version can't read (they fail isValidProfile: a newer app's
+// profile under a rule loosened since, say) and that aren't in `profiles`, so saveSharedProfiles can
+// write them back as they are. This app never had them in its roster, so a save that left them out
+// would delete them for every app in the group. Only entries with an id are kept (anything else is
+// unusable to every app). [] when the stored roster can't be read at all. The web store is read
+// directly, past its failed-write latch: that latch is there so a stale roster can't replace a
+// local one, and nothing read here replaces anything.
+async function unreadableEntries(groupId: string, profiles: Profile[]): Promise<unknown[]> {
+  let json: string | null | undefined
+  try {
+    json = web ? web.storage.getItem(webKey(groupId, PROFILES_KEY)) : await native?.getSharedJSON(groupId, PROFILES_KEY)
+  } catch {
+    return []
+  }
+  if (!json) return []
+  try {
+    const parsed: unknown = JSON.parse(json)
+    if (!Array.isArray(parsed)) return []
+    const saved = new Set(profiles.map((profile) => profile.id))
+    return parsed.filter((entry) => !isValidProfile(entry) && hasId(entry) && !saved.has(entry.id))
+  } catch {
+    return []
+  }
+}
+
 // Overwrites the entire shared roster - same whole-blob-write discipline a host app's own
-// AsyncStorage-backed profile store already uses, not an incremental per-profile update. A write
-// failure (store unavailable, or some other native error) is swallowed rather than thrown: the
-// caller's own local state is already the source of truth for what just changed, and this is a
-// best-effort mirror of it, not the other way around.
+// AsyncStorage-backed profile store already uses, not an incremental per-profile update - except
+// for the stored entries this version can't read, which it keeps (see unreadableEntries), after
+// `profiles`. A write failure (store unavailable, or some other native error) is swallowed rather
+// than thrown: the caller's own local state is already the source of truth for what just changed,
+// and this is a best-effort mirror of it, not the other way around. A failed read before it writes
+// `profiles` alone, as every save did before entries were kept.
 export async function saveSharedProfiles(groupId: string, profiles: Profile[]): Promise<void> {
   if (!native) return
   try {
-    await native.setSharedJSON(groupId, PROFILES_KEY, JSON.stringify(profiles))
+    const kept = await unreadableEntries(groupId, profiles)
+    await native.setSharedJSON(groupId, PROFILES_KEY, JSON.stringify([...profiles, ...kept]))
   } catch {
     // Best-effort - see doc comment above.
   }

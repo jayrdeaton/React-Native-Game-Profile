@@ -291,6 +291,38 @@ describe('ProfilesManager', () => {
     expect(lastPreviewValue()).toBe(propPreview)
   })
 
+  // ProfileColorProvider's renderSwatch reaches hud's color picker too (Hangman's triad pies): its
+  // trigger as a chip (the profile's tag is on it), its grid as the place a color is chosen.
+  it("hands the color picker ProfileColorProvider's swatch renderer, its trigger as a chip and its grid as a color page", () => {
+    const renderSwatch = jest.fn(() => null)
+    render(
+      <ProfileColorProvider renderSwatch={renderSwatch}>
+        <ProfilesManager profiles={[]} defaultColor={DEFAULT_COLOR} onCreate={jest.fn()} onSave={jest.fn()} onDelete={jest.fn()} />
+      </ProfileColorProvider>
+    )
+    act(() => findTouchableRippleByText('New Profile').onPress())
+    const pickerSwatch = (mockInlineColorPicker.mock.lastCall![0] as { renderSwatch?: (color: string, size: number, place: 'trigger' | 'swatch') => unknown }).renderSwatch!
+    pickerSwatch('#112233', 48, 'trigger')
+    pickerSwatch('#445566', 28, 'swatch')
+    expect(renderSwatch).toHaveBeenNthCalledWith(1, '#112233', 48, 'chip')
+    expect(renderSwatch).toHaveBeenNthCalledWith(2, '#445566', 28, 'colorPage')
+  })
+
+  it('draws flat swatches without a renderer', () => {
+    renderManager()
+    act(() => findTouchableRippleByText('New Profile').onPress())
+    expect((mockInlineColorPicker.mock.lastCall![0] as { renderSwatch?: unknown }).renderSwatch).toBeUndefined()
+  })
+
+  // The popover opens inside the roster's scroll view, which clips it: the color picker keeps it inside.
+  it("keeps the color popover inside the roster's column", () => {
+    renderManager()
+    act(() => findTouchableRippleByText('New Profile').onPress())
+    const bounds = (mockInlineColorPicker.mock.lastCall![0] as { bounds?: unknown }).bounds
+    const column = (View as unknown as jest.Mock).mock.calls.map((call) => call[0] as { ref?: unknown; children?: any }).find((props) => props.ref === bounds)
+    expect(column?.children?.type).toBe(FadingScrollView)
+  })
+
   it('tapping New Profile opens a blank draft with no delete affordance', () => {
     renderManager()
     act(() => findTouchableRippleByText('New Profile').onPress())
@@ -589,8 +621,21 @@ describe('ProfilesManager: useColorPickerAlign', () => {
 
     // Sized exactly as InlineColorPicker sizes itself: the default swatch list at the raw window width.
     expect(mockGetContentSize).toHaveBeenLastCalledWith(defaultColors.length, 402)
-    expect(useColorPickerAlign).toHaveBeenLastCalledWith(false, 100 + defaultColors.length, 10 + 402)
+    expect(useColorPickerAlign).toHaveBeenLastCalledWith(false, 100 + defaultColors.length, 10 + 402, expect.anything())
     expect(lastInlineColorPickerProps().alignOverride).toBe(placement)
+  })
+
+  // The popover opens inside the roster's scroll view, which clips it, so the hook is handed the
+  // column to keep it inside, without the host having to know the column's width.
+  it('hands the hook the roster column: the View the scroll view fills', () => {
+    const useColorPickerAlign = jest.fn((..._args: unknown[]) => placement)
+    renderManager({ useColorPickerAlign })
+    act(() => findTouchableRippleByText('New Profile').onPress())
+
+    const column = useColorPickerAlign.mock.lastCall![3]
+    const wrapper = (View as unknown as jest.Mock).mock.calls.map((call) => call[0] as { ref?: unknown; collapsable?: boolean; style?: unknown; children?: any }).find((props) => props.ref === column)
+    expect(wrapper).toMatchObject({ collapsable: false, style: { flex: 1 } })
+    expect(wrapper?.children?.type).toBe(FadingScrollView)
   })
 
   it('reports the popover as open to the hook once the color popover host opens, and closed again after', () => {

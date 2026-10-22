@@ -2,6 +2,7 @@ import { TouchableRipple } from '@rific/feedback-press'
 import type { PopoverHost } from '@tastic/hud/chrome'
 import { useAutoAlign } from '@tastic/hud/chrome'
 import { act, render } from '@testing-library/react'
+import { View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
 
 import { IdentityChip } from '../IdentityChip'
@@ -39,6 +40,7 @@ const mockUseAutoAlign = useAutoAlign as unknown as jest.Mock
 const mockIdentityChip = IdentityChip as unknown as jest.Mock
 const mockIcon = Icon as unknown as jest.Mock
 const mockText = Text as unknown as jest.Mock
+const mockView = View as unknown as jest.Mock
 
 type Level = 'easy' | 'normal' | 'hard'
 const OPTIONS: OptionPickerOption<Level>[] = [
@@ -58,12 +60,13 @@ interface Overrides {
   alignOverride?: ProfilePickerAlignResult
   rotation?: 0 | 90 | -90 | 180
   dark?: boolean
+  triggerStyle?: object
 }
 
 function renderPicker(overrides: Overrides = {}) {
   const host = overrides.host ?? makeHost(null)
   const onChange = overrides.onChange ?? jest.fn()
-  render(<OptionPicker id={ID} host={host} options={OPTIONS} value={overrides.value ?? 'normal'} onChange={onChange} color='#123456' dark={overrides.dark ?? true} icon='robot' colorSection={overrides.colorSection} alignOverride={overrides.alignOverride} rotation={overrides.rotation} />)
+  render(<OptionPicker id={ID} host={host} options={OPTIONS} value={overrides.value ?? 'normal'} onChange={onChange} color='#123456' dark={overrides.dark ?? true} icon='robot' colorSection={overrides.colorSection} alignOverride={overrides.alignOverride} rotation={overrides.rotation} triggerStyle={overrides.triggerStyle} />)
   return { host, onChange }
 }
 
@@ -140,6 +143,16 @@ describe('OptionPicker', () => {
     // The color page is taller than three rows and the Color row; the same page as a profile picker's.
     expect(getOptionPickerContentSize(3, {}).height).toBe(getProfilePickerContentSize(0, false, {}).height)
     expect(getOptionPickerContentSize(8, {}).height).toBe(16 + 8 * 36 + 36 + 9)
+  })
+
+  // Solitaire's Stats screen: two of these side by side, each given a flexShrink (ProfilePicker.test.tsx
+  // covers the shrinking in full).
+  it('shrinks in its row like the chip pill it is, with a flexShrink in triggerStyle', () => {
+    const flat = (style: unknown): Record<string, unknown> => Object.assign({}, ...[style].flat(Infinity).filter(Boolean))
+    renderPicker({ triggerStyle: [{ backgroundColor: '#222222' }, { flexShrink: 1 }] })
+    const anchor = mockView.mock.calls.map((call) => flat((call[0] as { style?: unknown }).style)).find((style) => style.position === 'relative')
+    expect(anchor).toMatchObject({ flexShrink: 1, minWidth: 84 })
+    expect(flat((mockTouchableRipple.mock.calls[0][0] as { style?: unknown }).style)).toMatchObject({ backgroundColor: '#222222', maxWidth: '100%' })
   })
 
   it('hands useAutoAlign its size and rotation, and lets alignOverride place it instead', () => {

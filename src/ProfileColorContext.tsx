@@ -29,8 +29,8 @@ interface ProfileColorProviderProps {
   // where it is (ProfileSwatchPlace) and kept flat where it returns null. Hangman draws a pie of each
   // color's triad on the Color row and page only. The renderer is drawn behind the swatch's mark,
   // clipped to the circle.
-  // Rows that fill with a color (a selected picker row) stay flat, and so does hud's InlineColorPicker
-  // (ProfilesManager's color trigger and swatches), which doesn't read this context.
+  // ProfilesManager hands it to hud's InlineColorPicker too (its trigger as a 'chip', its grid as the
+  // 'colorPage'). Rows that fill with a color (a selected picker row) stay flat.
   renderSwatch?: ProfileSwatchRenderer
   children: ReactNode
 }

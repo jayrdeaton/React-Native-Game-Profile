@@ -57,7 +57,10 @@ see its own doc comment for why that component is generic over your own `Profile
   (`{ value, onChange, previewValue?, swatches?, label?, caption? }`) puts a Color row at the top of
   the popover that opens a page of swatches (with a back row), and turns the trigger into one
   button that leads with a chip in `color` with the selected profile's tag; `triggerStyle` styles
-  that button. Also exports
+  that button. A `flexShrink` in `triggerStyle` lets the button give way in a row too narrow for
+  it: its label is cut off with an ellipsis while the chip and chevron keep their size, and it never
+  gets narrower than those. With room it lays out as before. `OptionPicker` takes the same
+  `triggerStyle`. Also exports
   `getProfilePickerContentSize(profileCount, hasManageRow?, colorSection?)` - the popover's
   `{ width, height }`, for sizing your own placement hook.
 - **`ProfilesManager`**: the roster screen itself: create/rename/recolor/retag/delete, editing
@@ -84,7 +87,10 @@ see its own doc comment for why that component is generic over your own `Profile
   in that app's own local extension table yet - e.g. it was created on a different app in the
   group). This split is deliberate, not a limitation to work around: it's this package's own
   base-fields-only `Profile` boundary (see above), just applied to storage instead of just to the
-  TypeScript type.
+  TypeScript type. A read drops any stored entry that this version's `isValidProfile` rejects (a
+  profile saved by a newer app under a rule loosened since), and `saveSharedProfiles` writes those
+  entries back after your roster as they were, so an older app can't delete a newer app's profile
+  just by saving.
 
   ```ts
   // Conceptual sketch of the pattern - see "Redux helpers for the shared roster" below for a
@@ -174,14 +180,16 @@ rect). Pass a placement **hook** as `useColorPickerAlign`:
 <ProfilesScreen useColorPickerAlign={useFrameAutoAlign} /* ...the usual props */ />
 ```
 
-It is called as `useColorPickerAlign(open, contentWidth, contentHeight)` - `open` is whether the swatch
-popover is showing, and the size is what `InlineColorPicker` itself computes (`@tastic/hud`'s
-`getInlineColorPickerContentSize` for the default swatch list at the raw window width) - and must return a
+It is called as `useColorPickerAlign(open, contentWidth, contentHeight, column)` - `open` is whether the swatch
+popover is showing, the size is what `InlineColorPicker` itself computes (`@tastic/hud`'s
+`getInlineColorPickerContentSize` for the default swatch list at the raw window width), and `column` is a ref
+to the roster's scroll view, which clips the popover at its edges: measure it to keep the popover inside a
+roster narrower than the frame (a column capped in a wide window) - and must return a
 `ProfilePickerAlignResult`, which is handed to `InlineColorPicker` as its `alignOverride` (its `triggerRef`
 is the ref that gets measured). It is a hook, not a plain function: give it a stable identity for the life of
 the mount (a module-level function), since switching it at runtime remounts the swatch. Omit it and behaviour is
-identical to before. **Needs `@tastic/hud` >= 0.12.0** to have any effect - older hud has no `alignOverride`
-on `InlineColorPicker` and ignores it.
+identical to before, and without a hook the popover is kept inside that column for you (`InlineColorPicker`'s
+`bounds`, `@tastic/hud` 0.25.0+).
 
 ### Routed screens: `ProfilesScreen`
 
@@ -327,9 +335,10 @@ const renderSwatch: ProfileSwatchRenderer = (color, size, place) => (place === '
 ```
 
 (`TriadPie` is your own component, e.g. three `react-native-svg` arcs.) Give it a stable identity
-(module level, or `useCallback`). Rows that fill with a color (a selected picker row) stay flat, and
-so do `@tastic/hud`'s `InlineColorPicker` swatches in `ProfilesManager`'s edit row, which don't read
-this provider. `useProfileSwatchRenderer()` returns it (or `undefined`).
+(module level, or `useCallback`). `ProfilesManager`'s edit row hands it to `@tastic/hud`'s
+`InlineColorPicker` too: its trigger (the profile's color with its tag on it) as a `'chip'`, its grid
+as the `'colorPage'`. Rows that fill with a color (a selected picker row) stay flat.
+`useProfileSwatchRenderer()` returns it (or `undefined`).
 
 ## Per-seat color persistence
 

@@ -18,6 +18,11 @@ const OTHER_VALID_PROFILE: Profile = {
   updatedAt: 2000
 }
 
+// A profile from a newer app whose rules this version doesn't accept (a four-letter tag), and an
+// entry no app could use (no id).
+const NEWER_APP_PROFILE = { ...OTHER_VALID_PROFILE, id: 'profile-3', name: 'Cleo', tag: 'CLEO' }
+const NO_ID_ENTRY = { name: 'Nobody', color: '#000000', tag: '', createdAt: 1, updatedAt: 1 }
+
 const GROUP_ID = 'group.tastic.profile'
 
 describe('sharedProfileStore - native module unavailable', () => {
@@ -212,6 +217,48 @@ describe('sharedProfileStore - native module available', () => {
     const store = require('../sharedProfileStore')
     await expect(store.saveSharedProfiles(GROUP_ID, [VALID_PROFILE])).resolves.toBeUndefined()
   })
+
+  // An app can't read a newer app's profile under a rule loosened since, so it never had it in its
+  // roster: a save that left it out would delete it for every app in the group.
+  describe('entries this version cannot read', () => {
+    it('reads past them, and a save writes them back after the roster', async () => {
+      getSharedJSON.mockResolvedValue(JSON.stringify([VALID_PROFILE, NEWER_APP_PROFILE]))
+      setSharedJSON.mockResolvedValue(undefined)
+      const store = require('../sharedProfileStore')
+      await expect(store.readSharedProfiles(GROUP_ID)).resolves.toEqual([VALID_PROFILE])
+      await store.saveSharedProfiles(GROUP_ID, [VALID_PROFILE, OTHER_VALID_PROFILE])
+      expect(setSharedJSON).toHaveBeenCalledWith(GROUP_ID, 'sharedProfiles', JSON.stringify([VALID_PROFILE, OTHER_VALID_PROFILE, NEWER_APP_PROFILE]))
+    })
+
+    it("lets the app's own profile replace one with the same id", async () => {
+      const fixed = { ...NEWER_APP_PROFILE, tag: 'C' }
+      getSharedJSON.mockResolvedValue(JSON.stringify([NEWER_APP_PROFILE]))
+      setSharedJSON.mockResolvedValue(undefined)
+      const store = require('../sharedProfileStore')
+      await store.saveSharedProfiles(GROUP_ID, [fixed])
+      expect(setSharedJSON).toHaveBeenCalledWith(GROUP_ID, 'sharedProfiles', JSON.stringify([fixed]))
+    })
+
+    it('drops an entry with no id, which no app can use', async () => {
+      getSharedJSON.mockResolvedValue(JSON.stringify([NO_ID_ENTRY, NEWER_APP_PROFILE, 'junk', null]))
+      setSharedJSON.mockResolvedValue(undefined)
+      const store = require('../sharedProfileStore')
+      await store.saveSharedProfiles(GROUP_ID, [VALID_PROFILE])
+      expect(setSharedJSON).toHaveBeenCalledWith(GROUP_ID, 'sharedProfiles', JSON.stringify([VALID_PROFILE, NEWER_APP_PROFILE]))
+    })
+
+    it('still saves the roster when the stored one cannot be read', async () => {
+      getSharedJSON.mockRejectedValue(new Error('app group read failed'))
+      setSharedJSON.mockResolvedValue(undefined)
+      const store = require('../sharedProfileStore')
+      await store.saveSharedProfiles(GROUP_ID, [VALID_PROFILE])
+      expect(setSharedJSON).toHaveBeenCalledWith(GROUP_ID, 'sharedProfiles', JSON.stringify([VALID_PROFILE]))
+
+      getSharedJSON.mockResolvedValue('{not json')
+      await store.saveSharedProfiles(GROUP_ID, [OTHER_VALID_PROFILE])
+      expect(setSharedJSON).toHaveBeenLastCalledWith(GROUP_ID, 'sharedProfiles', JSON.stringify([OTHER_VALID_PROFILE]))
+    })
+  })
 })
 
 // The web build's store: every game in the group is served from one origin, so localStorage plays the
@@ -292,6 +339,20 @@ describe('sharedProfileStore - web', () => {
     setItem.mockRestore()
     await store.saveSharedProfiles(GROUP_ID, [OTHER_VALID_PROFILE])
     await expect(store.readSharedProfiles(GROUP_ID)).resolves.toEqual([OTHER_VALID_PROFILE])
+  })
+
+  it("keeps a newer app's profile it cannot read through a save, after a failed write too", async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([VALID_PROFILE, NEWER_APP_PROFILE]))
+    const store = loadWebStore()
+    const setItem = jest.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
+      throw new Error('QuotaExceededError')
+    })
+    await store.saveSharedProfiles(GROUP_ID, [VALID_PROFILE])
+    // The failed write's latch fails reads until a write succeeds; the save past it still finds the entry.
+    await expect(store.readSharedProfiles(GROUP_ID)).resolves.toBeNull()
+    setItem.mockRestore()
+    await store.saveSharedProfiles(GROUP_ID, [OTHER_VALID_PROFILE])
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')).toEqual([OTHER_VALID_PROFILE, NEWER_APP_PROFILE])
   })
 
   describe('subscribeSharedProfiles', () => {
