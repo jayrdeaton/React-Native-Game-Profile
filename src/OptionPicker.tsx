@@ -1,7 +1,8 @@
 import type { PopoverHost, PopoverRotation } from '@tastic/hud/chrome'
+import { Fragment } from 'react'
 import { type StyleProp, type ViewStyle } from 'react-native'
 
-import { IconRow, pickerContentSize, PickerMenu, type ProfilePickerAlignResult, type ProfilePickerColorSection, type ProfilePickerContentSize } from './PickerMenu'
+import { IconRow, MenuDivider, pickerContentSize, PickerMenu, type ProfilePickerAlignResult, type ProfilePickerColorSection, type ProfilePickerContentSize } from './PickerMenu'
 
 export interface OptionPickerOption<T extends string> {
   value: T
@@ -11,14 +12,24 @@ export interface OptionPickerOption<T extends string> {
   // one; the selected row still fills with the picker's `color`, its icon contrasting as always.
   // Without it the icon takes the row's text color.
   color?: string
+  // A divider above this row, setting it and the rows after it apart from the ones before as a
+  // different kind of choice (a person after a CPU's levels). Ignored on the first option, which the
+  // Color row's own divider, or nothing, already sits above.
+  dividerBefore?: boolean
 }
 
-// The popover's content footprint: one row per option, plus (with a `colorSection`) the Color row,
-// or the color page if that's taller - the same formula as getProfilePickerContentSize, for a host
-// that places this picker itself through `alignOverride` (a @tastic/split-screen zone's
-// useZoneClampedAlign, for one).
-export function getOptionPickerContentSize(optionCount: number, colorSection?: Pick<ProfilePickerColorSection, 'swatches' | 'caption'>): ProfilePickerContentSize {
-  return pickerContentSize(optionCount, colorSection)
+function hasDividerBefore(option: OptionPickerOption<string>, index: number): boolean {
+  return index > 0 && !!option.dividerBefore
+}
+
+// The popover's content footprint: one row per option and its dividers, plus (with a
+// `colorSection`) the Color row, or the color page if that's taller - the same formula as
+// getProfilePickerContentSize, for a host that places this picker itself through `alignOverride` (a
+// @tastic/split-screen zone's useZoneClampedAlign, for one). Given the options themselves it counts
+// their dividers too; given a count, rows only.
+export function getOptionPickerContentSize(options: number | readonly OptionPickerOption<string>[], colorSection?: Pick<ProfilePickerColorSection, 'swatches' | 'caption'>): ProfilePickerContentSize {
+  if (typeof options === 'number') return pickerContentSize(options, colorSection)
+  return pickerContentSize(options.length, colorSection, options.filter(hasDividerBefore).length)
 }
 
 interface OptionPickerProps<T extends string> {
@@ -61,9 +72,12 @@ export function OptionPicker<T extends string>({ id, host, options, value, onCha
   }
 
   return (
-    <PickerMenu id={id} host={host} color={color} dark={dark} label={selected?.label ?? ''} chip={{ icon }} colorSection={colorSection} contentSize={getOptionPickerContentSize(options.length, colorSection)} align={align} alignOverride={alignOverride} rotation={rotation} triggerStyle={triggerStyle}>
-      {options.map((option) => (
-        <IconRow key={option.value} icon={option.icon ?? rowIcon} iconColor={option.color} label={option.label} selected={option.value === value} color={color} fg={fg} onPress={() => handleSelect(option)} />
+    <PickerMenu id={id} host={host} color={color} dark={dark} label={selected?.label ?? ''} chip={{ icon }} colorSection={colorSection} contentSize={getOptionPickerContentSize(options, colorSection)} align={align} alignOverride={alignOverride} rotation={rotation} triggerStyle={triggerStyle}>
+      {options.map((option, index) => (
+        <Fragment key={option.value}>
+          {hasDividerBefore(option, index) && <MenuDivider color={color} />}
+          <IconRow icon={option.icon ?? rowIcon} iconColor={option.color} label={option.label} selected={option.value === value} color={color} fg={fg} onPress={() => handleSelect(option)} />
+        </Fragment>
       ))}
     </PickerMenu>
   )

@@ -138,6 +138,26 @@ describe('OptionPicker', () => {
     expect(onChange).toHaveBeenCalledWith('#000009')
   })
 
+  // DuelTastic's opponent menu: a CPU's levels, then Solo, then Player, each group set apart.
+  it('draws a divider above an option that asks for one, never above the first, and is sized for them', () => {
+    const grouped: OptionPickerOption<string>[] = [
+      { value: 'easy', label: 'Garter', dividerBefore: true },
+      { value: 'normal', label: 'Rattler' },
+      { value: 'solo', label: 'Solo', dividerBefore: true },
+      { value: 'person', label: 'Player', dividerBefore: true }
+    ]
+    render(<OptionPicker id={ID} host={makeHost(ID)} options={grouped} value='normal' onChange={jest.fn()} color='#123456' dark icon='robot' />)
+    const flat = (style: unknown): Record<string, unknown> => Object.assign({}, ...[style].flat(Infinity).filter(Boolean))
+    const dividers = mockView.mock.calls.map((call) => flat((call[0] as { style?: unknown }).style)).filter((style) => style.height === 1)
+    expect(dividers).toEqual([expect.objectContaining({ backgroundColor: '#123456' }), expect.objectContaining({ backgroundColor: '#123456' })])
+    expect(texts()).toEqual(['RATTLER', 'Garter', 'Rattler', 'Solo', 'Player'])
+
+    expect(getOptionPickerContentSize(grouped)).toEqual({ width: 220, height: 16 + 4 * 36 + 2 * 9 })
+    // With a Color row the dividers make the list page taller than the color page.
+    expect(getOptionPickerContentSize(grouped, {}).height).toBe(16 + 4 * 36 + 2 * 9 + 36 + 9)
+    expect(getOptionPickerContentSize(OPTIONS)).toEqual(getOptionPickerContentSize(3))
+  })
+
   it('is sized one row per option, plus the Color row or the color page', () => {
     expect(getOptionPickerContentSize(3)).toEqual({ width: 220, height: 16 + 3 * 36 })
     // The color page is taller than three rows and the Color row; the same page as a profile picker's.

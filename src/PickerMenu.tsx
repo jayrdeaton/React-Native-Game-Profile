@@ -49,8 +49,9 @@ const COLOR_ROW_SWATCH_SIZE = 22
 const COLOR_ROW_CAPTIONED_HEIGHT = 48
 const COLOR_LABEL_LINE = 18
 const COLOR_CAPTION_LINE = 16
-// The divider under the Color row: 1pt plus 4pt above and below, the same as the Manage divider.
-const COLOR_ROW_DIVIDER = 9
+// Every divider in the menu (under the Color row, over Manage, and between an OptionPicker's groups
+// of options): 1pt plus 4pt above and below.
+const DIVIDER_HEIGHT = 9
 // The color page: a back row, then the grid with this much space above and below it.
 const GRID_TOP = 4
 const GRID_BOTTOM = 8
@@ -115,10 +116,11 @@ function colorPageHeight(swatches: SeedColor[]) {
 // pages, exactly: the list with the Color row and its divider on top, or the color page (a back row
 // and the swatches), so one placement fits whichever page is showing. It leaves out the menu's 2pt
 // border and the Manage divider, ~13pt in all, so treat it as a placement estimate, not a
-// pixel-exact measurement. getProfilePickerContentSize and getOptionPickerContentSize count the
-// rows for their own picker.
-export function pickerContentSize(rowCount: number, colorSection?: Pick<ProfilePickerColorSection, 'swatches' | 'caption'>): ProfilePickerContentSize {
-  const list = rowCount * ROW_HEIGHT + (colorSection ? colorRowHeight(colorSection.caption) + COLOR_ROW_DIVIDER : 0)
+// pixel-exact measurement. `dividerCount` is the dividers between the rows (an OptionPicker's
+// `dividerBefore`). getProfilePickerContentSize and getOptionPickerContentSize count the rows for
+// their own picker.
+export function pickerContentSize(rowCount: number, colorSection?: Pick<ProfilePickerColorSection, 'swatches' | 'caption'>, dividerCount = 0): ProfilePickerContentSize {
+  const list = rowCount * ROW_HEIGHT + dividerCount * DIVIDER_HEIGHT + (colorSection ? colorRowHeight(colorSection.caption) + DIVIDER_HEIGHT : 0)
   const content = colorSection ? Math.max(list, colorPageHeight(colorSection.swatches ?? defaultColors)) : list
   return { width: POPOVER_WIDTH, height: LIST_PADDING * 2 + content }
 }
@@ -242,7 +244,7 @@ export function PickerMenu({ id, host, color, dark, label, chip, colorSection, h
           below. Not on the color page, which only has the back row and the swatches. */}
           {showFooter && (
             <View style={styles.menuFooter}>
-              <View style={[styles.divider, { backgroundColor: color }]} />
+              <MenuDivider color={color} />
               {footer}
             </View>
           )}
@@ -315,9 +317,14 @@ function ColorRow({ section, fg, dividerColor, onPress }: { section: ProfilePick
           <Icon source='chevron-right' size={18} color={fg} />
         </View>
       </TouchableRipple>
-      <View style={[styles.divider, { backgroundColor: dividerColor }]} />
+      <MenuDivider color={dividerColor} />
     </>
   )
+}
+
+// A line across the list between kinds of rows (see `divider` below), in the seat's own color.
+export function MenuDivider({ color }: { color: string }) {
+  return <View style={[styles.divider, { backgroundColor: color }]} />
 }
 
 // The color page: a back row to the list, then the swatches. `homeColor` is the selected profile's
@@ -443,7 +450,8 @@ const styles = StyleSheet.create({
     flex: 1
   },
   // Separates the footer (a navigation action) and the Color row from the selectable rows - a
-  // different kind of action, not just another row in the same list. Tinted with the seat's own color
+  // different kind of action, not just another row in the same list - and an OptionPicker's groups
+  // of options from each other (its `dividerBefore`). Tinted with the seat's own color
   // (passed in as backgroundColor) rather than a flat gray, matching the border/caret's own
   // accent-tinted look.
   divider: {
