@@ -62,8 +62,9 @@ export interface ProfileSelectionSlice<TSeat extends string | number> {
 // as @tastic/input's assignSeatScheme. A picker's takenProfileId only hides the other seat's
 // profile while both seats are on screen, so without the swap a 1 Player pick of seat 2's saved
 // profile left both seats on it, and every later 2 Player round recorded a win and a loss for that
-// one profile. A host showing per-seat state tied to the selection (a profile's color override)
-// should reset it for both seats when a pick swaps. REHYDRATE also drops any duplicate saved before
+// one profile. A host showing per-seat state of its own tied to the selection should reset it for
+// both seats when a pick swaps (createSeatColorsSlice's profile color picks follow the profile, so
+// they need nothing). REHYDRATE also drops any duplicate saved before
 // this rule existed, keeping the profile on the first seat.
 export function createProfileSelectionSlice<TSeat extends string | number>(namespace: string, defaultState: ProfileSelectionState<TSeat>, mountKey = 'profileSelection'): ProfileSelectionSlice<TSeat> {
   const select = createActionCreator<SelectProfilePayload<TSeat>>(`profileSelection/${namespace}/select`)

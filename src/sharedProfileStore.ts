@@ -115,13 +115,6 @@ export async function readSharedProfiles(groupId: string): Promise<Profile[] | n
   return parseRoster(json)
 }
 
-// readSharedProfiles with a failed read flattened to []: always resolves to an array, never
-// null/throws. Kept unchanged for apps that call it directly; prefer readSharedProfiles anywhere a
-// read can replace the roster or lead to a write (see its doc above).
-export async function loadSharedProfiles(groupId: string): Promise<Profile[]> {
-  return (await readSharedProfiles(groupId)) ?? []
-}
-
 const hasId = (entry: unknown): entry is { id: string } => typeof entry === 'object' && entry !== null && typeof (entry as { id?: unknown }).id === 'string' && (entry as { id: string }).id !== ''
 
 // The stored roster's entries this version can't read (they fail isValidProfile: a newer app's
