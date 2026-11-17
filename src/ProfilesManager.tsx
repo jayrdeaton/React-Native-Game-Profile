@@ -81,8 +81,8 @@ export interface ProfilesManagerProps {
   // Substitutes the color swatch popover's own placement, for a host that renders this screen inside a
   // FAKE-rotated frame (a View turned +-90deg while the OS stays portrait-locked). @tastic/hud's
   // InlineColorPicker places its popover with useAutoAlign, which compares a screen-space
-  // measureInWindow rect against the raw portrait window and (through its ambient rotation) double-rotates
-  // an already-transformed rect - so under a fake rotation it lands off its trigger. A host that knows its
+  // measureInWindow rect against the raw portrait window - so under a fake rotation it lands off its
+  // trigger. A host that knows its
   // frame passes its own placement HOOK here; it is called with the swatch popover's open state and content
   // size, and its result is handed to InlineColorPicker as `alignOverride` (its `triggerRef` is what gets
   // measured). It is a hook, not a plain function: give it a STABLE identity for the life of the mount (a

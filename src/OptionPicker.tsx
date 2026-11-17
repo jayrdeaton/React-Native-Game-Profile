@@ -1,4 +1,4 @@
-import type { PopoverHost, PopoverRotation } from '@tastic/hud/chrome'
+import type { PopoverHost } from '@tastic/hud/chrome'
 import { Fragment } from 'react'
 import { type StyleProp, type ViewStyle } from 'react-native'
 
@@ -51,7 +51,6 @@ interface OptionPickerProps<T extends string> {
   // See ProfilePicker's own props of the same names.
   align?: 'left' | 'right' | 'center'
   alignOverride?: ProfilePickerAlignResult
-  rotation?: PopoverRotation
   // The pill's own style (a background), as ProfilePicker's; a `flexShrink` lets it give way in a
   // narrow row, cutting its label off.
   triggerStyle?: StyleProp<ViewStyle>
@@ -62,7 +61,7 @@ interface OptionPickerProps<T extends string> {
 // player's. The button leads with a chip in `color` with `icon`, then the selected option's label
 // and a chevron. Picking an option closes the dropdown; the Color row works exactly as it does in
 // ProfilePicker (picking a swatch stays on the color page).
-export function OptionPicker<T extends string>({ id, host, options, value, onChange, color, dark, icon, rowIcon = icon, colorSection, align, alignOverride, rotation = 0, triggerStyle }: OptionPickerProps<T>) {
+export function OptionPicker<T extends string>({ id, host, options, value, onChange, color, dark, icon, rowIcon = icon, colorSection, align, alignOverride, triggerStyle }: OptionPickerProps<T>) {
   const fg = dark ? '#FFFFFF' : '#000000'
   const selected = options.find((option) => option.value === value)
 
@@ -72,7 +71,7 @@ export function OptionPicker<T extends string>({ id, host, options, value, onCha
   }
 
   return (
-    <PickerMenu id={id} host={host} color={color} dark={dark} label={selected?.label ?? ''} chip={{ icon }} colorSection={colorSection} contentSize={getOptionPickerContentSize(options, colorSection)} align={align} alignOverride={alignOverride} rotation={rotation} triggerStyle={triggerStyle}>
+    <PickerMenu id={id} host={host} color={color} dark={dark} label={selected?.label ?? ''} chip={{ icon }} colorSection={colorSection} contentSize={getOptionPickerContentSize(options, colorSection)} align={align} alignOverride={alignOverride} triggerStyle={triggerStyle}>
       {options.map((option, index) => (
         <Fragment key={option.value}>
           {hasDividerBefore(option, index) && <MenuDivider color={color} />}

@@ -100,7 +100,6 @@ interface Overrides {
   dark?: boolean
   align?: 'left' | 'right' | 'center'
   alignOverride?: ProfilePickerAlignResult
-  rotation?: 0 | 90 | -90 | 180
   guestLabel?: string
   nullLabel?: string
   nullIcon?: string
@@ -114,7 +113,7 @@ function renderPicker(overrides: Overrides = {}) {
   const host = overrides.host ?? makeHost(null)
   const onSelect = overrides.onSelect ?? jest.fn()
   const utils = render(
-    <ProfilePicker idPrefix={ID_PREFIX} host={host} profiles={overrides.profiles ?? PROFILES} selectedId={overrides.selectedId ?? null} takenId={overrides.takenId} takenIds={overrides.takenIds} color={overrides.color ?? '#123456'} dark={overrides.dark ?? false} align={overrides.align} alignOverride={overrides.alignOverride} rotation={overrides.rotation} guestLabel={overrides.guestLabel ?? 'guest'} nullLabel={overrides.nullLabel} nullIcon={overrides.nullIcon} onSelect={onSelect} onManage={overrides.onManage} colorSection={overrides.colorSection} triggerStyle={overrides.triggerStyle} />,
+    <ProfilePicker idPrefix={ID_PREFIX} host={host} profiles={overrides.profiles ?? PROFILES} selectedId={overrides.selectedId ?? null} takenId={overrides.takenId} takenIds={overrides.takenIds} color={overrides.color ?? '#123456'} dark={overrides.dark ?? false} align={overrides.align} alignOverride={overrides.alignOverride} guestLabel={overrides.guestLabel ?? 'guest'} nullLabel={overrides.nullLabel} nullIcon={overrides.nullIcon} onSelect={onSelect} onManage={overrides.onManage} colorSection={overrides.colorSection} triggerStyle={overrides.triggerStyle} />,
     overrides.preview || overrides.renderSwatch
       ? {
           wrapper: ({ children }) => (
@@ -399,30 +398,22 @@ describe('ProfilePicker', () => {
     })
   })
 
-  describe('default placement (no alignOverride/rotation)', () => {
-    it('calls useAutoAlign with exactly (open, popover width, content height, rotation 0) - unchanged from before these props existed', () => {
+  describe('default placement (no alignOverride)', () => {
+    it('calls useAutoAlign with exactly (open, popover width, content height)', () => {
       renderPicker({ host: makeHost(null) })
       expect(mockUseAutoAlign).toHaveBeenCalledTimes(1)
-      expect(mockUseAutoAlign).toHaveBeenCalledWith(false, 220, 160, 0)
+      expect(mockUseAutoAlign).toHaveBeenCalledWith(false, 220, 160)
     })
 
     it("passes open=true once its own trigger id is the host's open one", () => {
       renderPicker({ host: makeHost(TRIGGER_ID) })
-      expect(mockUseAutoAlign).toHaveBeenCalledWith(true, 220, 160, 0)
+      expect(mockUseAutoAlign).toHaveBeenCalledWith(true, 220, 160)
     })
 
     it("attaches the hook's own triggerRef to the measured trigger view", () => {
       renderPicker({ host: makeHost(TRIGGER_ID) })
       const autoRef = (mockUseAutoAlign.mock.results[0].value as ProfilePickerAlignResult).triggerRef
       expect(triggerViewProps().ref).toBe(autoRef)
-    })
-
-    it('forwards an explicit rotation to useAutoAlign', () => {
-      renderPicker({ host: makeHost(TRIGGER_ID), rotation: 90 })
-      expect(mockUseAutoAlign).toHaveBeenCalledWith(true, 220, 160, 90)
-      jest.clearAllMocks()
-      renderPicker({ host: makeHost(TRIGGER_ID), rotation: -90 })
-      expect(mockUseAutoAlign).toHaveBeenCalledWith(true, 220, 160, -90)
     })
   })
 
@@ -462,7 +453,7 @@ describe('ProfilePicker', () => {
 
     it('still calls useAutoAlign (hooks cannot be conditional), sized identically', () => {
       renderPicker({ host: makeHost(TRIGGER_ID), alignOverride: override })
-      expect(mockUseAutoAlign).toHaveBeenCalledWith(true, 220, 160, 0)
+      expect(mockUseAutoAlign).toHaveBeenCalledWith(true, 220, 160)
     })
 
     it("has the same shape as what @tastic/hud's own useAutoAlign returns (compile-time guard, both directions)", () => {
@@ -501,7 +492,7 @@ describe('ProfilePicker', () => {
         jest.clearAllMocks()
         renderPicker({ host: makeHost(null), onManage: hasManage ? jest.fn() : undefined })
         const { width, height } = getProfilePickerContentSize(PROFILES.length, hasManage)
-        expect(mockUseAutoAlign).toHaveBeenCalledWith(false, width, height, 0)
+        expect(mockUseAutoAlign).toHaveBeenCalledWith(false, width, height)
       }
     })
   })
@@ -846,7 +837,7 @@ describe('ProfilePicker', () => {
       const colorSection = section({ caption: 'Solitaire only' })
       renderPicker({ colorSection, onManage: jest.fn() })
       const { width, height } = getProfilePickerContentSize(PROFILES.length, true, colorSection)
-      expect(mockUseAutoAlign).toHaveBeenCalledWith(false, width, height, 0)
+      expect(mockUseAutoAlign).toHaveBeenCalledWith(false, width, height)
     })
   })
 })

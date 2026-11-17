@@ -1,6 +1,6 @@
 import { getContrastColor } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
-import type { PopoverHost, PopoverRotation } from '@tastic/hud/chrome'
+import type { PopoverHost } from '@tastic/hud/chrome'
 import { useMemo } from 'react'
 import { type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
@@ -65,15 +65,6 @@ interface ProfilePickerProps<P extends Profile> {
   // The result's `triggerRef` is the one attached to the measured trigger, so the hook that
   // produced it is measuring the right element. Omit for the default automatic placement.
   alignOverride?: ProfilePickerAlignResult
-  // Rotation of an ancestor frame turned by a fake landscape (or equivalent), forwarded to the
-  // automatic `useAutoAlign` measurement - the same seam @tastic/hud's InlineColorPicker/
-  // SectionedDropdown expose (needs @tastic/hud >= 0.8.0; older versions ignore it). Defaults to 0
-  // (measurement used as-is), which is exactly how this picker behaved before this prop existed.
-  // Deliberately NOT read from an ambient provider the way hud's own pickers do: this component
-  // never touches @tastic/core at runtime, and an ambient read would silently change placement for
-  // every existing caller already living under a rotation provider. Ignored when `alignOverride` is
-  // supplied (the override replaces the placement this feeds).
-  rotation?: PopoverRotation
   // Trigger's own idle-state text (uppercased here regardless of casing passed in) - shown until a
   // profile is selected.
   guestLabel: string
@@ -121,7 +112,7 @@ interface ProfilePickerProps<P extends Profile> {
 // it keeps this popover from needing its own destructive-delete confirmation. Fully prop-driven -
 // no internal profile-storage access of its own, so the host app stays the one place that reads
 // its own persistence hook.
-export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, selectedId, takenId, takenIds, color, dark, align, alignOverride, rotation = 0, guestLabel, nullLabel = 'Player', nullIcon = 'account-off-outline', onSelect, onManage, colorSection, triggerStyle }: ProfilePickerProps<P>) {
+export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, selectedId, takenId, takenIds, color, dark, align, alignOverride, guestLabel, nullLabel = 'Player', nullIcon = 'account-off-outline', onSelect, onManage, colorSection, triggerStyle }: ProfilePickerProps<P>) {
   const id = `${idPrefix}-profile`
   // A selected row fills with the profile's drawn color, the same one its ProfileChip would show.
   const colorPreview = useProfileColorPreview()
@@ -168,7 +159,7 @@ export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, sel
   ) : undefined
 
   return (
-    <PickerMenu id={id} host={host} color={color} dark={dark} label={selectedProfile?.name ?? guestLabel} chip={colorSection ? { tag: selectedProfile?.tag, icon: selectedProfile ? 'account' : nullIcon } : undefined} colorSection={colorSection} homeColor={selectedProfile?.color} contentSize={contentSize} align={align} alignOverride={alignOverride} rotation={rotation} triggerStyle={triggerStyle} footer={manageFooter}>
+    <PickerMenu id={id} host={host} color={color} dark={dark} label={selectedProfile?.name ?? guestLabel} chip={colorSection ? { tag: selectedProfile?.tag, icon: selectedProfile ? 'account' : nullIcon } : undefined} colorSection={colorSection} homeColor={selectedProfile?.color} contentSize={contentSize} align={align} alignOverride={alignOverride} triggerStyle={triggerStyle} footer={manageFooter}>
       <IconRow icon={nullIcon} label={nullLabel} selected={selectedId === null} color={color} fg={fg} onPress={handleSelectGuest} />
 
       {sortedProfiles.map((profile) => {

@@ -58,7 +58,6 @@ interface Overrides {
   onChange?: (value: Level) => void
   colorSection?: ProfilePickerColorSection
   alignOverride?: ProfilePickerAlignResult
-  rotation?: 0 | 90 | -90 | 180
   dark?: boolean
   triggerStyle?: object
 }
@@ -66,7 +65,7 @@ interface Overrides {
 function renderPicker(overrides: Overrides = {}) {
   const host = overrides.host ?? makeHost(null)
   const onChange = overrides.onChange ?? jest.fn()
-  render(<OptionPicker id={ID} host={host} options={OPTIONS} value={overrides.value ?? 'normal'} onChange={onChange} color='#123456' dark={overrides.dark ?? true} icon='robot' colorSection={overrides.colorSection} alignOverride={overrides.alignOverride} rotation={overrides.rotation} triggerStyle={overrides.triggerStyle} />)
+  render(<OptionPicker id={ID} host={host} options={OPTIONS} value={overrides.value ?? 'normal'} onChange={onChange} color='#123456' dark={overrides.dark ?? true} icon='robot' colorSection={overrides.colorSection} alignOverride={overrides.alignOverride} triggerStyle={overrides.triggerStyle} />)
   return { host, onChange }
 }
 
@@ -175,10 +174,10 @@ describe('OptionPicker', () => {
     expect(flat((mockTouchableRipple.mock.calls[0][0] as { style?: unknown }).style)).toMatchObject({ backgroundColor: '#222222', maxWidth: '100%' })
   })
 
-  it('hands useAutoAlign its size and rotation, and lets alignOverride place it instead', () => {
-    renderPicker({ rotation: 180, colorSection: { value: '#000003', onChange: jest.fn() } })
+  it('hands useAutoAlign its size, and lets alignOverride place it instead', () => {
+    renderPicker({ colorSection: { value: '#000003', onChange: jest.fn() } })
     const { width, height } = getOptionPickerContentSize(3, {})
-    expect(mockUseAutoAlign).toHaveBeenCalledWith(false, width, height, 180)
+    expect(mockUseAutoAlign).toHaveBeenCalledWith(false, width, height)
 
     jest.clearAllMocks()
     renderPicker({ host: makeHost(ID), alignOverride: { align: 'left', verticalAlign: 'above', maxHeight: 120, measured: false, triggerRef: { current: null } } })

@@ -1,6 +1,6 @@
 import { defaultColors, FadingScrollView, getContrastColor, type SeedColor } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
-import type { PopoverHost, PopoverRotation, ViewInstance } from '@tastic/hud/chrome'
+import type { PopoverHost, ViewInstance } from '@tastic/hud/chrome'
 import { PopoverBody, useAutoAlign } from '@tastic/hud/chrome'
 import { ReactNode, RefObject, useState } from 'react'
 import { type LayoutChangeEvent, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native'
@@ -144,7 +144,6 @@ interface PickerMenuProps {
   contentSize: ProfilePickerContentSize
   align?: 'left' | 'right' | 'center'
   alignOverride?: ProfilePickerAlignResult
-  rotation: PopoverRotation
   // The pressable trigger's own style (a host's background behind the pill). A `flexShrink` in it lets
   // the trigger give way in the host's row: see `shrinks` below.
   triggerStyle?: StyleProp<ViewStyle>
@@ -154,7 +153,7 @@ interface PickerMenuProps {
   children: ReactNode
 }
 
-export function PickerMenu({ id, host, color, dark, label, chip, colorSection, homeColor, contentSize, align: forcedAlign, alignOverride, rotation, triggerStyle, footer, children }: PickerMenuProps) {
+export function PickerMenu({ id, host, color, dark, label, chip, colorSection, homeColor, contentSize, align: forcedAlign, alignOverride, triggerStyle, footer, children }: PickerMenuProps) {
   const menuBg = dark ? '#000000' : '#FFFFFF'
   const fg = dark ? '#FFFFFF' : '#000000'
 
@@ -162,7 +161,7 @@ export function PickerMenu({ id, host, color, dark, label, chip, colorSection, h
   // Always called, even when `alignOverride` is supplied and this result goes unused - hooks can't
   // be conditional (see @tastic/hud's InlineColorPicker for the identical pattern). With an
   // override its triggerRef is never attached, so this hook's own measurement is a no-op.
-  const auto = useAutoAlign(open, contentSize.width, contentSize.height, rotation)
+  const auto = useAutoAlign(open, contentSize.width, contentSize.height)
   const placement = alignOverride ?? auto
   const { maxHeight, measured, triggerRef, verticalAlign } = placement
   const align = forcedAlign ?? placement.align

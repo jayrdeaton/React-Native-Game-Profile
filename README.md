@@ -61,9 +61,8 @@ see its own doc comment for why that component is generic over your own `Profile
   `'account-off-outline'`) relabel the null row. Profiles are listed alphabetically by name.
   `takenId` disables one other seat's profile in the list; `takenIds`
   (an array) disables several, for a lobby with more than two seats, and never disables the
-  picker's own selection, so you can pass every seated id. Placement props (all optional, see "Fake-rotated frames" below):
-  `align` (force a horizontal side), `alignOverride` (substitute the whole placement result), and
-  `rotation` (forwarded to the automatic measurement). `colorSection` (a
+  picker's own selection, so you can pass every seated id. Placement props (both optional, see "Fake-rotated frames" below):
+  `align` (force a horizontal side) and `alignOverride` (substitute the whole placement result). `colorSection` (a
   `ProfilePickerColorSection`: `{ value, onChange, previewValue?, swatches?, label?, caption?,
   takenValue?, allowSwapTaken? }`) puts a Color row at the top of the popover that opens a page of
   swatches (with a back row), and turns the trigger into one button that leads with a chip in
@@ -85,7 +84,7 @@ see its own doc comment for why that component is generic over your own `Profile
   leads with a chip in `color` showing `icon` (a robot, say), then the selected option's label and a
   chevron. It takes `id` (the popover id it toggles on `host`), `host`, `options`, `value`,
   `onChange(value)`, `color`, `dark` and `icon`, plus `rowIcon` (the row icon for an option without
-  its own, defaulting to `icon`) and the same `colorSection`, `align`, `alignOverride`, `rotation`
+  its own, defaulting to `icon`) and the same `colorSection`, `align`, `alignOverride`
   and `triggerStyle` as `ProfilePicker`. Each `OptionPickerOption` is `{ value, label, icon?,
   color?, dividerBefore? }`: `color` tints that option's row icon while it isn't the selected row
   (the selected row fills with the picker's `color` as usual), and `dividerBefore` draws a divider
@@ -174,18 +173,17 @@ see its own doc comment for why that component is generic over your own `Profile
 trigger with `measureInWindow` and compares that rect against the raw window. Inside a *fake*
 rotation (a `View` turned +-90deg while the OS stays portrait-locked) the rect is in true screen
 space but the frame is not, so the hook measures along the wrong axes and can pick the wrong side -
-flipping the list upward off-screen, or running it past the frame's bottom. Three optional props
+flipping the list upward off-screen, or running it past the frame's bottom. Two optional props
 (which `OptionPicker` takes too) give you the same seam `@tastic/hud`'s `InlineColorPicker` has:
 
 | Prop | Type | Default | Effect |
 | --- | --- | --- | --- |
 | `align` | `'left' \| 'right' \| 'center'` | - | Forces the horizontal side; always beats the placement's own `align`. |
 | `alignOverride` | `ProfilePickerAlignResult` (`{ align, verticalAlign, maxHeight, measured, triggerRef }`, the same shape as `useAutoAlign`'s return / `@tastic/hud`'s `AlignResult`) | - | Replaces the automatic placement wholesale: its `align`/`verticalAlign`/`maxHeight`/`measured` drive the popover, and its `triggerRef` is the ref attached to the measured trigger. |
-| `rotation` | `0 \| 90 \| -90 \| 180` | `0` | Forwarded to the automatic `useAutoAlign` call (needs `@tastic/hud` >= 0.8.0). Ignored when `alignOverride` is given. |
 
-With none of them set the picker behaves exactly as it always has. Note `rotation` is never read
-from an ambient provider here (unlike `@tastic/hud`'s own pickers) - this package doesn't touch
-`@tastic/core` at runtime - so pass it explicitly.
+With neither set the picker places itself with `useAutoAlign`. The `rotation` prop (forwarded to
+`useAutoAlign`) was removed after 0.18.0, along with `useAutoAlign`'s own `rotation` argument in
+`@tastic/hud` 0.34.
 
 To supply your own placement, run a rotation-aware placement hook against the popover's real size,
 using `getProfilePickerContentSize` so the two can't drift:
@@ -210,9 +208,8 @@ for 20 colors), plus the padding.
 
 `ProfilesManager` (and `ProfilesScreen`, which forwards it) renders `@tastic/hud`'s `InlineColorPicker`
 for the swatch popover in an edit row, and owns the popover state internally - so the host cannot pass
-`alignOverride` to it directly. Inside a fake-rotated frame that popover has the same misplacement (and
-`InlineColorPicker` also feeds `useAutoAlign` its ambient rotation, double-rotating an already-transformed
-rect). Pass a placement **hook** as `useColorPickerAlign`:
+`alignOverride` to it directly. Inside a fake-rotated frame that popover has the same misplacement.
+Pass a placement **hook** as `useColorPickerAlign`:
 
 ```tsx
 <ProfilesScreen useColorPickerAlign={useFrameAutoAlign} /* ...the usual props */ />
