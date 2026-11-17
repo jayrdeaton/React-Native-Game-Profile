@@ -494,3 +494,7 @@ picker; the floor is 0.25.1 because `InlineColorPicker`'s `bounds` and `renderSw
 `expo-modules-core` is only for the native App Group bridge described above, which the shared
 roster functions use on iOS. It's loaded inside a `try`, so it's safe to omit entirely on an
 Android/web-only consumer (the web store needs nothing from it).
+
+---
+
+Made by [Infinite Token](https://www.infinitetoken.com), the team behind [Lumber](https://lumber.infinitetoken.com): end-to-end encrypted logging.
