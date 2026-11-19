@@ -134,6 +134,9 @@ interface PickerMenuProps {
   dark: boolean
   // The trigger's text, uppercased here.
   label: string
+  // A small line over the label naming what the pill picks ('Difficulty'), so a pill showing only its
+  // value ('Any') says what it's for. It fits inside the chip pill's height. Uppercased here.
+  caption?: string
   // Turns the trigger into the chip pill: a circle in `color` with `tag` (or `icon`), then the label
   // and the chevron. Omit for the plain name trigger.
   chip?: { tag?: string; icon: string }
@@ -153,7 +156,7 @@ interface PickerMenuProps {
   children: ReactNode
 }
 
-export function PickerMenu({ id, host, color, dark, label, chip, colorSection, homeColor, contentSize, align: forcedAlign, alignOverride, triggerStyle, footer, children }: PickerMenuProps) {
+export function PickerMenu({ id, host, color, dark, label, caption, chip, colorSection, homeColor, contentSize, align: forcedAlign, alignOverride, triggerStyle, footer, children }: PickerMenuProps) {
   const menuBg = dark ? '#000000' : '#FFFFFF'
   const fg = dark ? '#FFFFFF' : '#000000'
 
@@ -181,6 +184,7 @@ export function PickerMenu({ id, host, color, dark, label, chip, colorSection, h
     host.toggle(id)
   }
   const triggerLabel = label.toUpperCase()
+  const triggerCaption = caption?.toUpperCase()
   // Shown on the list page only (see the footer below).
   const showFooter = !!footer && !showColorPage
 
@@ -200,15 +204,26 @@ export function PickerMenu({ id, host, color, dark, label, chip, colorSection, h
   return (
     <View style={[styles.anchor, anchorShrink, open && styles.anchorOpen]} onLayout={handleAnchorLayout}>
       {/* The cap goes before the host's style, so a host's own maxWidth still wins. */}
-      <TouchableRipple onPress={handleTriggerPress} borderless={chipTrigger} style={[styles.trigger, chipTrigger && styles.chipTrigger, shrinks && styles.triggerShrinks, shrinks ? pillStyle : triggerStyle]} accessibilityRole='button' accessibilityLabel={triggerLabel}>
+      <TouchableRipple onPress={handleTriggerPress} borderless={chipTrigger} style={[styles.trigger, chipTrigger && styles.chipTrigger, shrinks && styles.triggerShrinks, shrinks ? pillStyle : triggerStyle]} accessibilityRole='button' accessibilityLabel={triggerCaption ? `${triggerCaption}, ${triggerLabel}` : triggerLabel}>
         <View ref={triggerRef} collapsable={false} style={chipTrigger ? styles.chipTriggerInner : styles.triggerInner}>
           {chip && <IdentityChip color={color} tag={chip.tag} icon={chip.icon} size={CHIP_SIZE} />}
           {/* The chip trigger's name and chevron are plain fg: the chip carries the color, and a muted
           color on the host's pill read dim. The plain trigger keeps the color, which is what tells a
           multi-seat game's seats apart. */}
-          <Text style={[styles.triggerLabel, { color: chipTrigger ? fg : color }, lettering]} numberOfLines={1}>
-            {triggerLabel}
-          </Text>
+          {triggerCaption ? (
+            <View style={styles.triggerText}>
+              <Text style={[styles.triggerCaption, { color: chipTrigger ? fg : color }, lettering, styles.triggerCaptionSize]} numberOfLines={1}>
+                {triggerCaption}
+              </Text>
+              <Text style={[styles.triggerLabel, { color: chipTrigger ? fg : color }, lettering]} numberOfLines={1}>
+                {triggerLabel}
+              </Text>
+            </View>
+          ) : (
+            <Text style={[styles.triggerLabel, { color: chipTrigger ? fg : color }, lettering]} numberOfLines={1}>
+              {triggerLabel}
+            </Text>
+          )}
           <Icon source='menu-down' size={CHEVRON_SIZE} color={chipTrigger ? fg : color} />
         </View>
       </TouchableRipple>
@@ -536,6 +551,17 @@ const styles = StyleSheet.create({
   trigger: {
     alignSelf: 'flex-start'
   },
+  // The caption's look; its size goes after a game's lettering (see triggerCaptionSize).
+  triggerCaption: {
+    fontWeight: '700',
+    letterSpacing: 1,
+    opacity: 0.7
+  },
+  // Small enough that the caption and the label fit the chip pill's height together.
+  triggerCaptionSize: {
+    fontSize: 10,
+    lineHeight: 12
+  },
   triggerInner: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -555,5 +581,10 @@ const styles = StyleSheet.create({
   // width, which is what cuts the label off.
   triggerShrinks: {
     maxWidth: '100%'
+  },
+  // The caption over the label, giving way with it in a shrinking trigger.
+  triggerText: {
+    flexShrink: 1,
+    minWidth: 0
   }
 })

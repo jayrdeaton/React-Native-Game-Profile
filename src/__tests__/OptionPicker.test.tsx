@@ -61,12 +61,13 @@ interface Overrides {
   alignOverride?: ProfilePickerAlignResult
   dark?: boolean
   triggerStyle?: object
+  caption?: string
 }
 
 function renderPicker(overrides: Overrides = {}) {
   const host = overrides.host ?? makeHost(null)
   const onChange = overrides.onChange ?? jest.fn()
-  render(<OptionPicker id={ID} host={host} options={OPTIONS} value={overrides.value ?? 'normal'} onChange={onChange} color='#123456' dark={overrides.dark ?? true} icon='robot' colorSection={overrides.colorSection} alignOverride={overrides.alignOverride} triggerStyle={overrides.triggerStyle} />)
+  render(<OptionPicker id={ID} host={host} options={OPTIONS} value={overrides.value ?? 'normal'} onChange={onChange} color='#123456' dark={overrides.dark ?? true} icon='robot' colorSection={overrides.colorSection} alignOverride={overrides.alignOverride} triggerStyle={overrides.triggerStyle} caption={overrides.caption} />)
   return { host, onChange }
 }
 
@@ -89,6 +90,26 @@ describe('OptionPicker', () => {
     const label = (Text as unknown as jest.Mock).mock.calls.find((call) => call[0].children === 'KING COBRA')![0]
     expect([label.style].flat(Infinity)).toContainEqual(lettering)
     jest.mocked(useLettering).mockReturnValue({})
+  })
+
+  // What the pill picks, over its value, so a pill reading "Any" says what it's for.
+  it('captions its label, in the lettering at a smaller size, and is read caption first', () => {
+    const lettering = { fontFamily: 'AlphaSketch', fontSize: 14 }
+    jest.mocked(useLettering).mockReturnValue({ label: lettering })
+    renderPicker({ value: 'hard', caption: 'Difficulty' })
+    expect(texts()).toEqual(['DIFFICULTY', 'KING COBRA'])
+    const caption = (Text as unknown as jest.Mock).mock.calls.find((call) => call[0].children === 'DIFFICULTY')![0]
+    const style = [caption.style].flat(Infinity)
+    expect(style).toContainEqual(lettering)
+    // The caption's own size comes after the lettering's.
+    expect(Object.assign({}, ...style)).toMatchObject({ fontFamily: 'AlphaSketch', fontSize: 10 })
+    expect(mockTouchableRipple.mock.calls[0][0]).toMatchObject({ accessibilityLabel: 'DIFFICULTY, KING COBRA' })
+    jest.mocked(useLettering).mockReturnValue({})
+  })
+
+  it('is read by its label alone without a caption', () => {
+    renderPicker({ value: 'hard' })
+    expect(mockTouchableRipple.mock.calls[0][0]).toMatchObject({ accessibilityLabel: 'KING COBRA' })
   })
 
   it("toggles its own id on the host and draws no rows while it's closed", () => {

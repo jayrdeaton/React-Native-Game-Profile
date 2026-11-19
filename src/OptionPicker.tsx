@@ -44,6 +44,8 @@ interface OptionPickerProps<T extends string> {
   dark: boolean
   // The chip's glyph (e.g. a robot for a CPU seat).
   icon: string
+  // A small line over the selected option's label naming what the pill picks (PickerMenu's `caption`).
+  caption?: string
   // An option without its own icon falls back to this one in its row. Defaults to `icon`.
   rowIcon?: string
   // The same Color row and page as ProfilePicker's `colorSection`.
@@ -61,7 +63,7 @@ interface OptionPickerProps<T extends string> {
 // player's. The button leads with a chip in `color` with `icon`, then the selected option's label
 // and a chevron. Picking an option closes the dropdown; the Color row works exactly as it does in
 // ProfilePicker (picking a swatch stays on the color page).
-export function OptionPicker<T extends string>({ id, host, options, value, onChange, color, dark, icon, rowIcon = icon, colorSection, align, alignOverride, triggerStyle }: OptionPickerProps<T>) {
+export function OptionPicker<T extends string>({ id, host, options, value, onChange, color, dark, icon, caption, rowIcon = icon, colorSection, align, alignOverride, triggerStyle }: OptionPickerProps<T>) {
   const fg = dark ? '#FFFFFF' : '#000000'
   const selected = options.find((option) => option.value === value)
 
@@ -71,7 +73,7 @@ export function OptionPicker<T extends string>({ id, host, options, value, onCha
   }
 
   return (
-    <PickerMenu id={id} host={host} color={color} dark={dark} label={selected?.label ?? ''} chip={{ icon }} colorSection={colorSection} contentSize={getOptionPickerContentSize(options, colorSection)} align={align} alignOverride={alignOverride} triggerStyle={triggerStyle}>
+    <PickerMenu id={id} host={host} color={color} dark={dark} label={selected?.label ?? ''} caption={caption} chip={{ icon }} colorSection={colorSection} contentSize={getOptionPickerContentSize(options, colorSection)} align={align} alignOverride={alignOverride} triggerStyle={triggerStyle}>
       {options.map((option, index) => (
         <Fragment key={option.value}>
           {hasDividerBefore(option, index) && <MenuDivider color={color} />}

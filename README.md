@@ -84,8 +84,10 @@ see its own doc comment for why that component is generic over your own `Profile
   leads with a chip in `color` showing `icon` (a robot, say), then the selected option's label and a
   chevron. It takes `id` (the popover id it toggles on `host`), `host`, `options`, `value`,
   `onChange(value)`, `color`, `dark` and `icon`, plus `rowIcon` (the row icon for an option without
-  its own, defaulting to `icon`) and the same `colorSection`, `align`, `alignOverride`
-  and `triggerStyle` as `ProfilePicker`. Each `OptionPickerOption` is `{ value, label, icon?,
+  its own, defaulting to `icon`), `caption` (a small line over the selected option's label naming
+  what the pill picks, such as "Difficulty", so a pill showing only "Any" says what it's for; it
+  fits inside the pill's height and is read before the label, "DIFFICULTY, ANY") and the same
+  `colorSection`, `align`, `alignOverride` and `triggerStyle` as `ProfilePicker`. Each `OptionPickerOption` is `{ value, label, icon?,
   color?, dividerBefore? }`: `color` tints that option's row icon while it isn't the selected row
   (the selected row fills with the picker's `color` as usual), and `dividerBefore` draws a divider
   above the row to set it and the rows after it apart (ignored on the first option). Picking an
