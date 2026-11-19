@@ -1,7 +1,7 @@
 import { defaultColors, FadingScrollView, getContrastColor, type SeedColor } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
 import type { PopoverHost, ViewInstance } from '@tastic/hud/chrome'
-import { PopoverBody, useAutoAlign } from '@tastic/hud/chrome'
+import { PopoverBody, useAutoAlign, useLettering } from '@tastic/hud/chrome'
 import { ReactNode, RefObject, useState } from 'react'
 import { type LayoutChangeEvent, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
@@ -192,6 +192,8 @@ export function PickerMenu({ id, host, color, dark, label, chip, colorSection, h
   // the popover's alignment, follow the shrunk width. Without a flexShrink nothing here changes.
   const flatTriggerStyle: ViewStyle = StyleSheet.flatten(triggerStyle) ?? {}
   const { flexShrink, ...pillStyle } = flatTriggerStyle
+  // The pill's label in the game's own lettering (hud's LetteringProvider: AlphaTastic's title font).
+  const { label: lettering } = useLettering()
   const shrinks = typeof flexShrink === 'number' && flexShrink > 0
   const anchorShrink = shrinks ? { flexShrink, minWidth: chipTrigger ? CHIP_TRIGGER_FIXED_WIDTH : PLAIN_TRIGGER_FIXED_WIDTH } : undefined
 
@@ -204,7 +206,7 @@ export function PickerMenu({ id, host, color, dark, label, chip, colorSection, h
           {/* The chip trigger's name and chevron are plain fg: the chip carries the color, and a muted
           color on the host's pill read dim. The plain trigger keeps the color, which is what tells a
           multi-seat game's seats apart. */}
-          <Text style={[styles.triggerLabel, { color: chipTrigger ? fg : color }]} numberOfLines={1}>
+          <Text style={[styles.triggerLabel, { color: chipTrigger ? fg : color }, lettering]} numberOfLines={1}>
             {triggerLabel}
           </Text>
           <Icon source='menu-down' size={CHEVRON_SIZE} color={chipTrigger ? fg : color} />

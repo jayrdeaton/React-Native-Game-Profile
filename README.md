@@ -340,6 +340,13 @@ so a host app plugs the reducer(s) into whatever store it already has:
   Always local, like the seat colors below, and never part of the shared
   App Group roster, since who's selected on *this* device is naturally per-app, per-device state.
 
+## A game's own lettering on the pills
+
+`ProfilePicker`'s and `OptionPicker`'s pill label is laid over with `@tastic/hud`'s `LetteringProvider`
+`label` style when an app sets one (AlphaTastic sets its title font, through `@tastic/shell`'s
+`labelStyle`). Without it the pill keeps its own bold capitals. Needs `@tastic/hud` with
+`LetteringProvider`.
+
 ## Muted profile colors and drawn swatches (`ProfileColorProvider`)
 
 An app that draws profile colors through a transform (Solitaire blends them toward its muted

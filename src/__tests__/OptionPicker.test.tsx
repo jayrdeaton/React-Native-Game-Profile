@@ -1,6 +1,6 @@
 import { TouchableRipple } from '@rific/feedback-press'
 import type { PopoverHost } from '@tastic/hud/chrome'
-import { useAutoAlign } from '@tastic/hud/chrome'
+import { useAutoAlign, useLettering } from '@tastic/hud/chrome'
 import { act, render } from '@testing-library/react'
 import { View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
@@ -21,6 +21,7 @@ jest.mock('@rific/feedback-press', () => ({
 }))
 
 jest.mock('@tastic/hud/chrome', () => ({
+  useLettering: jest.fn(() => ({})),
   PopoverBody: jest.fn((props: { visible?: boolean; children?: unknown }) => (props.visible ? (props.children ?? null) : null)),
   useAutoAlign: jest.fn(() => ({
     align: 'center',
@@ -78,6 +79,16 @@ describe('OptionPicker', () => {
     renderPicker({ value: 'hard' })
     expect(mockIdentityChip).toHaveBeenCalledWith(expect.objectContaining({ color: '#123456', icon: 'robot', tag: undefined, size: 32 }), undefined)
     expect(texts()[0]).toBe('KING COBRA')
+  })
+
+  // A game's own lettering on the pill's label (hud's LetteringProvider: AlphaTastic's title font).
+  it("letters its label in the game's lettering", () => {
+    const lettering = { fontFamily: 'AlphaSketch' }
+    jest.mocked(useLettering).mockReturnValue({ label: lettering })
+    renderPicker({ value: 'hard' })
+    const label = (Text as unknown as jest.Mock).mock.calls.find((call) => call[0].children === 'KING COBRA')![0]
+    expect([label.style].flat(Infinity)).toContainEqual(lettering)
+    jest.mocked(useLettering).mockReturnValue({})
   })
 
   it("toggles its own id on the host and draws no rows while it's closed", () => {

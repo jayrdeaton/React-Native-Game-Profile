@@ -36,6 +36,7 @@ jest.mock('@rific/feedback-press', () => ({
 }))
 
 jest.mock('@tastic/hud/chrome', () => ({
+  useLettering: jest.fn(() => ({})),
   PopoverBody: jest.fn((props: { visible?: boolean; children?: unknown }) => (props.visible ? (props.children ?? null) : null)),
   useAutoAlign: jest.fn(() => ({
     align: 'center',
