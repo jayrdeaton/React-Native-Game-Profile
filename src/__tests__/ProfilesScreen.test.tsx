@@ -8,8 +8,8 @@ import { Profile } from '../types'
 
 // ProfilesManager has its own dedicated test suite (ProfilesManager.test.tsx) - this file only
 // needs to assert ProfilesScreen's own wiring around it (which props pass straight through
-// unchanged, and the container/back-button/commit-before-navigate composition it adds on top), not
-// re-verify ProfilesManager's own rendering. Mocked down to a jest.fn() the same way
+// unchanged, and the container and back button it adds on top), not re-verify ProfilesManager's own
+// rendering. Mocked down to a jest.fn() the same way
 // ProfilePicker.test.tsx mocks its own sibling ProfileChip.
 jest.mock('../ProfilesManager', () => ({
   ProfilesManager: jest.fn(() => null)
@@ -32,8 +32,6 @@ jest.mock('@rific/feedback-press', () => ({
 const mockUseAutoPaperTheme = useAutoPaperTheme as jest.MockedFunction<typeof useAutoPaperTheme>
 const mockProfilesManager = ProfilesManager as jest.MockedFunction<typeof ProfilesManager>
 
-const DEFAULT_COLOR = '#00AAFF'
-
 function createProfile(overrides: Partial<Profile> = {}): Profile {
   return {
     id: 'profile-id',
@@ -47,12 +45,10 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
 }
 
 function renderScreen(overrides: Partial<ProfilesScreenProps> = {}) {
-  const onCreate = jest.fn()
-  const onSave = jest.fn()
-  const onDelete = jest.fn()
+  const onEdit = jest.fn()
   const onBack = jest.fn()
-  const utils = render(<ProfilesScreen profiles={[]} defaultColor={DEFAULT_COLOR} onCreate={onCreate} onSave={onSave} onDelete={onDelete} onBack={onBack} {...overrides} />)
-  return { ...utils, onCreate, onSave, onDelete, onBack }
+  const utils = render(<ProfilesScreen profiles={[]} onEdit={onEdit} onBack={onBack} {...overrides} />)
+  return { ...utils, onEdit, onBack }
 }
 
 function lastManagerProps(): any {
@@ -66,27 +62,14 @@ beforeEach(() => {
 })
 
 describe('ProfilesScreen', () => {
-  it('forwards profiles/defaultColor straight through to ProfilesManager', () => {
+  it('forwards profiles and onEdit straight through to ProfilesManager', () => {
     const alice = createProfile({ id: 'a', name: 'Alice' })
-    renderScreen({ profiles: [alice] })
+    const { onEdit } = renderScreen({ profiles: [alice] })
 
     const props = lastManagerProps()
     expect(props.profiles).toEqual([alice])
-    expect(props.defaultColor).toBe(DEFAULT_COLOR)
-  })
-
-  it('forwards onCreate/onSave/onDelete straight through, with the caller-given patch/id shape untouched', () => {
-    const { onCreate, onSave, onDelete } = renderScreen()
-    const props = lastManagerProps()
-
-    props.onCreate({ name: 'New', color: '#000000', tag: 'N' })
-    expect(onCreate).toHaveBeenCalledWith({ name: 'New', color: '#000000', tag: 'N' })
-
-    props.onSave('a', { name: 'Alicia', color: '#111111', tag: 'A' })
-    expect(onSave).toHaveBeenCalledWith('a', { name: 'Alicia', color: '#111111', tag: 'A' })
-
-    props.onDelete('a')
-    expect(onDelete).toHaveBeenCalledWith('a')
+    props.onEdit('a')
+    expect(onEdit).toHaveBeenCalledWith('a')
   })
 
   it('defaults fg/bg to black-on-white in light mode, and resolves the same fg for both the back button and ProfilesManager', () => {
@@ -107,59 +90,24 @@ describe('ProfilesScreen', () => {
     expect(props.headerLeft.props.iconColor).toBe('#FFFFFF')
   })
 
-  it('fg/fgMuted/titleVariant/colorPreview overrides are forwarded straight through to ProfilesManager', () => {
-    const colorPreview = jest.fn()
-    renderScreen({ fg: '#123123', fgMuted: '#456456', titleVariant: 'titleLarge', colorPreview })
+  it('fg/titleVariant overrides are forwarded straight through to ProfilesManager', () => {
+    renderScreen({ fg: '#123123', titleVariant: 'titleLarge' })
 
     const props = lastManagerProps()
     expect(props.fg).toBe('#123123')
-    expect(props.fgMuted).toBe('#456456')
     expect(props.titleVariant).toBe('titleLarge')
-    expect(props.colorPreview).toBe(colorPreview)
-    // The back button's own iconColor tracks the resolved fg override too, same as the light/dark
-    // default case above.
+    // The back button's own iconColor tracks the resolved fg override too.
     expect(props.headerLeft.props.iconColor).toBe('#123123')
   })
 
-  it("renders a labeled back-arrow IconButton as ProfilesManager's headerLeft", () => {
-    renderScreen()
+  it("renders a labeled back-arrow IconButton as ProfilesManager's headerLeft that calls onBack", () => {
+    const { onBack } = renderScreen()
 
     const headerLeft = lastManagerProps().headerLeft
     expect(headerLeft.type).toBe(IconButton)
     expect(headerLeft.props.icon).toBe('arrow-left')
     expect(headerLeft.props.accessibilityLabel).toBe('Back')
-  })
-
-  it('forwards useColorPickerAlign straight through to ProfilesManager, and omits it when not given', () => {
-    renderScreen()
-    expect(lastManagerProps().useColorPickerAlign).toBeUndefined()
-
-    const useColorPickerAlign = jest.fn()
-    renderScreen({ useColorPickerAlign })
-    expect(lastManagerProps().useColorPickerAlign).toBe(useColorPickerAlign)
-  })
-
-  it('the back button commits any pending edit through the ProfilesManager ref, then calls onBack', () => {
-    const commitPendingEdit = jest.fn()
-    const { onBack } = renderScreen()
-    const props = lastManagerProps()
-
-    // Simulates ProfilesManager's own useImperativeHandle attaching its handle to the ref
-    // ProfilesScreen owns and passes down - see ProfilesManager.tsx's own ref wiring.
-    props.ref.current = { commitPendingEdit }
-
-    props.headerLeft.props.onPress()
-
-    expect(commitPendingEdit).toHaveBeenCalledTimes(1)
-    expect(onBack).toHaveBeenCalledTimes(1)
-    expect(commitPendingEdit.mock.invocationCallOrder[0]).toBeLessThan(onBack.mock.invocationCallOrder[0])
-  })
-
-  it('the back button is a safe no-op on the ref when ProfilesManager has not attached a handle yet', () => {
-    const { onBack } = renderScreen()
-    const props = lastManagerProps()
-
-    expect(() => props.headerLeft.props.onPress()).not.toThrow()
+    headerLeft.props.onPress()
     expect(onBack).toHaveBeenCalledTimes(1)
   })
 })

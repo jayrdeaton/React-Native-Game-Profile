@@ -24,7 +24,7 @@ describe('@tastic/hud import boundary', () => {
   const found = sourceFiles(SRC).flatMap((file) => [...readFileSync(file, 'utf8').matchAll(HUD_SPECIFIER)].map((match) => ({ file: relative(SRC, file), specifier: match[2] })))
 
   it('sees the hud imports it guards, in source and in the test mocks', () => {
-    expect(found.map(({ file }) => file)).toEqual(expect.arrayContaining(['OptionPicker.tsx', 'PickerMenu.tsx', 'ProfilePicker.tsx', 'ProfilesManager.tsx', join('__tests__', 'OptionPicker.test.tsx'), join('__tests__', 'ProfilePicker.test.tsx'), join('__tests__', 'ProfilesManager.test.tsx')]))
+    expect(found.map(({ file }) => file)).toEqual(expect.arrayContaining(['EditProfileScreen.tsx', 'OptionPicker.tsx', 'PickerMenu.tsx', 'ProfilePicker.tsx', join('__tests__', 'EditProfileScreen.test.tsx'), join('__tests__', 'OptionPicker.test.tsx'), join('__tests__', 'ProfilePicker.test.tsx'), join('__tests__', 'ProfilesManager.test.tsx')]))
   })
 
   it("names only '@tastic/hud/chrome'", () => {

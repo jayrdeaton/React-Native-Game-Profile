@@ -1,18 +1,12 @@
-import { defaultColors, FadingScrollView, useAutoPaperTheme } from '@rific/auto-paper'
+import { FadingScrollView, useAutoPaperTheme } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
-import { useFocusChain } from '@rific/focus-chain'
-import { useToast } from '@rific/toaster'
-import type { InlineColorPickerSwatchRenderer, PopoverHost, ViewInstance } from '@tastic/hud/chrome'
-import { ConfirmDialog, getInlineColorPickerContentSize, InlineColorPicker, usePopoverHost } from '@tastic/hud/chrome'
-import { ComponentProps, ReactNode, Ref, RefObject, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { KeyboardAvoidingView, Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
-import { Icon, Text, TextInput } from 'react-native-paper'
+import { ReactNode, useMemo } from 'react'
+import { StyleSheet, View } from 'react-native'
+import { Icon, Text } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { NEW_PROFILE_ID } from './EditProfileScreen'
 import { ProfileChip } from './ProfileChip'
-import { type ProfileSwatchRenderer, useProfileColorPreview, useProfileSwatchRenderer } from './ProfileColorContext'
-import { type ProfilePickerAlignResult } from './ProfilePicker'
-import { clampTag, isValidTag, MAX_PROFILE_NAME_LENGTH } from './profilesValidation'
 import { Profile } from './types'
 
 // Shared by the New Profile row's own dashed circle and every profile row's own ProfileChip - one
@@ -24,219 +18,36 @@ const CHIP_SIZE = 40
 // as @tastic/hud's BaseStatsScreen does for its own identical titleVariant prop.
 type MD3TextVariant = 'displayLarge' | 'displayMedium' | 'displaySmall' | 'headlineLarge' | 'headlineMedium' | 'headlineSmall' | 'titleLarge' | 'titleMedium' | 'titleSmall' | 'labelLarge' | 'labelMedium' | 'labelSmall' | 'bodyLarge' | 'bodyMedium' | 'bodySmall'
 
-// Exported (not just used internally) so a host composing a screen around this component - e.g.
-// @tastic/profile's own ProfilesScreen - can reference this exact shape in its own onCreate/onSave
-// prop types without redeclaring it.
-export interface ProfileEditPatch {
-  name: string
-  color: string
-  tag: string
-}
-
-export interface ProfilesManagerHandle {
-  // Flushes whatever row is currently being edited - the same thing this component's own unmount
-  // effect does, but callable explicitly. Exists because "unmount" isn't a reliable "the user is
-  // navigating away" signal on every host: React Navigation's web renderer keeps a popped screen
-  // mounted-but-hidden instead of unmounting it, so a host relying only on the unmount fallback
-  // silently loses an in-progress edit on `router.back()` there. A host whose router doesn't
-  // genuinely unmount this component on navigation should hold a ref and call this right before
-  // navigating away (e.g. in its own back-button handler). Safe to call any time, including when
-  // nothing is being edited - a no-op then, same as the unmount effect already is.
-  commitPendingEdit: () => void
-}
-
 export interface ProfilesManagerProps {
   profiles: Profile[]
-  // The color a brand-new profile's draft starts on - this component doesn't have (and shouldn't
-  // invent) an opinion about the host app's own palette, so this is required rather than defaulted.
-  defaultColor: string
-  onCreate: (input: ProfileEditPatch) => void
-  onSave: (id: string, patch: ProfileEditPatch) => void
-  // Irreversible - this only fires after this component's own confirmation card, not on the first
-  // tap. If the host app tracks anything else keyed by profile id (stats, history), clear that on
-  // its own side when this fires.
-  onDelete: (id: string) => void
-  // Rendered inline, before the "Profiles" title, in this component's own header row - a plain
-  // rendering slot, not an onBack-style callback: this component doesn't know or care that it's a
-  // back button, only that the host wants something shown there. Omit to hide the slot.
+  // Opens a profile's Edit Profile screen: called with its id when its row is tapped, and with
+  // NEW_PROFILE_ID for New Profile. The game pushes its edit route (`/profile/<id>`), which renders
+  // EditProfileScreen with that id - the same way hud's Settings takes `onShowProfiles`.
+  onEdit: (profileId: string) => void
+  // Rendered inline, before the "Profiles" title, in the header row - a plain rendering slot, not an
+  // onBack-style callback: this component doesn't know or care that it's a back button, only that the
+  // host wants something shown there. Omit to hide the slot.
   headerLeft?: ReactNode
-  // React 19 accepts `ref` as a plain prop on a function component (no forwardRef needed) - see
-  // ProfilesManagerHandle's own doc for why a host may need this.
-  ref?: Ref<ProfilesManagerHandle>
-  // Independently optional overrides for this screen's text colors - each defaults to the same
-  // literal-black/white-by-appearance formula as before when omitted. Same convention as @tastic/hud's
-  // BaseStatsScreen fg override, for a caller with its own app-wide chrome palette instead of that
-  // literal black/white convention. (cardBg, which only colored the delete confirmation, went with it
-  // when that became hud's ConfirmDialog, 0.13.0.)
+  // The text color, black/white by appearance when omitted. Same convention as @tastic/hud's
+  // BaseStatsScreen fg override, for a caller with its own chrome palette.
   fg?: string
-  fgMuted?: string
   // 'headlineSmall' (this screen's own default, below), matching BaseStatsScreen's own settled
-  // default and the reasoning behind it - this title sits next to a small headerLeft back-button
-  // glyph the same way, and the previous hardcoded 'displaySmall' read as oversized there too.
+  // default - this title sits next to a small headerLeft back-button glyph the same way.
   titleVariant?: MD3TextVariant
-  // Transforms the color swatch grid's own preview per-swatch - forwarded straight to the internal
-  // InlineColorPicker's identical prop (see its own doc). Leaves draftColor/onCreate/onSave's actual
-  // color value untouched; only what's rendered changes. Defaults to ProfileColorProvider's preview.
-  colorPreview?: (hex: string) => string
-  // Substitutes the color swatch popover's own placement, for a host that renders this screen inside a
-  // FAKE-rotated frame (a View turned +-90deg while the OS stays portrait-locked). @tastic/hud's
-  // InlineColorPicker places its popover with useAutoAlign, which compares a screen-space
-  // measureInWindow rect against the raw portrait window - so under a fake rotation it lands off its
-  // trigger. A host that knows its
-  // frame passes its own placement HOOK here; it is called with the swatch popover's open state and content
-  // size, and its result is handed to InlineColorPicker as `alignOverride` (its `triggerRef` is what gets
-  // measured). It is a hook, not a plain function: give it a STABLE identity for the life of the mount (a
-  // module-level function) - switching it at runtime remounts the swatch. Omit for the ordinary case;
-  // behaviour is then identical to before. Needs @tastic/hud >= 0.12.0 to have any effect (older hud has no
-  // `alignOverride` and ignores it). Its fourth argument, `column`, is the roster's scroll view: the popover
-  // opens inside it and is clipped at its edges, so where it's narrower than the frame (a column capped in a
-  // wide window) the placement should keep the popover inside it. A hook that measures it never has to be
-  // told the column's width. A hook that ignores it behaves as before.
-  useColorPickerAlign?: (open: boolean, contentWidth: number, contentHeight: number, column: RefObject<ViewInstance | null>) => ProfilePickerAlignResult
 }
 
 type Row = { kind: 'profile'; profile: Profile } | { kind: 'new' }
 
-// A focus-chain ref as a Paper TextInput takes it. Paper types its input's handle as
-// Pick<TextInput, 'focus' | ...>, which React Native 0.88's strict types read as `focus: unknown`
-// (TextInput is a function there, not a class), so focus-chain's ref, which wants `focus(): void`,
-// no longer fits the prop. The handle does have focus() at run time.
-const textInputRef = (ref: (el: { focus: () => void } | null) => void) => ref as (el: unknown) => void
-
-// First letter of the name, uppercased - the tag's own default for as long as it hasn't been typed
-// into directly (see the tagManuallySet state below). Empty name -> empty tag, same as typing
-// nothing into the tag field yourself would leave it.
-function deriveTag(name: string): string {
-  const trimmed = name.trim()
-  return trimmed ? trimmed[0].toUpperCase() : ''
-}
-
-// The profile roster itself - create/rename/recolor/retag/delete, editing inline right in the row
-// you tapped - with no navigation of its own: just data in (`profiles`) and callbacks out, plus
-// this file's own internal edit-draft state. Deliberately router-agnostic (an `onBack`-style prop
-// would still assume *some* host owns navigation; this component doesn't even go that far), so any
-// consuming screen just renders it as its body inside its own routed wrapper (back button, native
-// push/pop transition, whatever persistence hook backs `profiles`/`onCreate`/`onSave`/`onDelete`).
-// Staying router-agnostic means this component can't know for itself whether "navigating away"
-// really unmounts it on a given host's router - see ProfilesManagerHandle's own doc for the
-// react-navigation-web case where it doesn't, and why a host there needs the `ref` escape hatch
-// instead of relying on the unmount fallback alone.
-export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDelete, headerLeft, ref, fg: fgOverride, fgMuted: fgMutedOverride, titleVariant = 'headlineSmall', colorPreview: colorPreviewProp, useColorPickerAlign }: ProfilesManagerProps) {
-  // An explicit prop wins; otherwise the app-wide ProfileColorProvider's, so the swatch previews
-  // match the ProfileChips drawn in the list.
-  const contextColorPreview = useProfileColorPreview()
-  const colorPreview = colorPreviewProp ?? contextColorPreview
+// The profile roster: a chip and name per profile, alphabetically, New Profile last. Tapping a row
+// opens that profile's Edit Profile screen through `onEdit`, which the game wires to its navigation
+// (Jay, 2026-11-20: a real screen, with its own transition, address and back gestures; it was a swap
+// inside this component for a few hours the same day). No navigation of its own: data in
+// (`profiles`), callbacks out, so a host renders it as a routed screen's body inside its own wrapper
+// (back button, persistence) - or uses ProfilesScreen, which is that wrapper.
+export function ProfilesManager({ profiles, onEdit, headerLeft, fg: fgOverride, titleVariant = 'headlineSmall' }: ProfilesManagerProps) {
   const { dark } = useAutoPaperTheme()
   const insets = useSafeAreaInsets()
-  const { error: showErrorToast } = useToast()
-  // The roster's scroll view, which clips the color popover: the color picker keeps its popover
-  // inside it (InlineColorPicker's `bounds`), and a host's useColorPickerAlign is handed it.
-  const columnRef = useRef<ViewInstance>(null)
-  // ProfileColorProvider's swatch renderer, for the color picker's trigger and swatches.
-  const renderSwatch = useProfileSwatchRenderer()
-  // Only one row is ever in edit mode at a time (see commitEdit, called before any new row opens),
-  // so every EditRow instance can safely share this one host instead of each needing its own.
-  const host = usePopoverHost()
   const fg = fgOverride ?? (dark ? '#FFFFFF' : '#000000')
-  const fgMuted = fgMutedOverride ?? (dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)')
-
-  // 'new' clears back to null once a commit resolves - there's only ever one row open at a time.
-  const [editingId, setEditingId] = useState<string | 'new' | null>(null)
-  const [draftName, setDraftName] = useState('')
-  const [draftColor, setDraftColor] = useState(defaultColor)
-  const [draftTag, setDraftTag] = useState('')
-  // Whether the tag has been typed into directly this session - once true, editing the name stops
-  // overwriting it (see deriveTag's own doc). Starts true for an existing profile that already has
-  // a tag (don't clobber a deliberate choice just because the name changed), false otherwise - a
-  // brand new profile, or one that's never had a tag set at all.
-  const [tagManuallySet, setTagManuallySet] = useState(false)
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
-
-  // Commits whichever row is currently open, using its own latest draft state, then closes it -
-  // always closes, even when there's nothing valid to save (an empty name just discards the draft
-  // rather than leaving the row stuck open). This is the only way a row ever closes: submitting the
-  // name field (see EditRow's own focus-chain wiring - tag submits to name, name submits this),
-  // switching to a different row (see startEdit, which calls this before opening a new one), or
-  // leaving the screen entirely (see the unmount effect below) - no explicit save/cancel buttons,
-  // just scoped to the whole row instead of one field, since there's more than one field to touch.
-  const commitEdit = useCallback(() => {
-    const name = draftName.trim()
-    if (editingId && name) {
-      const tagValid = isValidTag(draftTag)
-      // Surfaced here, not just the field's own live `error` outline - that outline disappears the
-      // moment this row closes, so without this a still-invalid tag would just silently vanish
-      // (saved as empty) with no explanation of why it didn't stick.
-      if (draftTag && !tagValid) showErrorToast('Invalid tag', 'Use up to 3 letters or a single emoji')
-      const tag = tagValid ? draftTag : ''
-      if (editingId === 'new') onCreate({ color: draftColor, name, tag })
-      else onSave(editingId, { color: draftColor, name, tag })
-    }
-    setEditingId(null)
-  }, [editingId, draftName, draftColor, draftTag, onCreate, onSave, showErrorToast])
-
-  // Flushes whatever's currently being edited if this whole screen goes away mid-edit - a hardware
-  // back gesture or swipe-back can bypass a host screen's own back button (which should already
-  // call commitEdit before navigating away) but still unmounts this component the same as any other
-  // exit does. Reads the always-current commitEdit through a ref rather than depending on it
-  // directly in the effect - one that re-ran (and re-cleaned-up) on every keystroke would commit on
-  // every keystroke too, not just on a genuine unmount.
-  const commitEditRef = useRef(commitEdit)
-  useEffect(() => {
-    commitEditRef.current = commitEdit
-  })
-  useEffect(() => () => commitEditRef.current(), [])
-  // The explicit escape hatch for hosts whose "navigate away" doesn't genuinely unmount this
-  // component - see ProfilesManagerHandle's own doc. `[]` deps: the handle object itself never
-  // needs to change identity, since it always calls through the ref to whatever commitEdit is
-  // current at call time, the same indirection the unmount effect above already relies on.
-  useImperativeHandle(ref, () => ({ commitPendingEdit: () => commitEditRef.current() }), [])
-
-  const startEdit = useCallback(
-    (target: 'new' | Profile) => {
-      commitEdit()
-      if (target === 'new') {
-        setDraftName('')
-        setDraftColor(defaultColor)
-        setDraftTag('')
-        setTagManuallySet(false)
-      } else {
-        setDraftName(target.name)
-        setDraftColor(target.color)
-        setDraftTag(target.tag)
-        setTagManuallySet(target.tag !== '')
-      }
-      setEditingId(target === 'new' ? 'new' : target.id)
-    },
-    [commitEdit, defaultColor]
-  )
-
-  const handleNameChange = useCallback(
-    (name: string) => {
-      setDraftName(name)
-      if (!tagManuallySet) setDraftTag(deriveTag(name))
-    },
-    [tagManuallySet]
-  )
-
-  // The functional setDraftTag form - reading `previous` from React's own latest-applied state
-  // rather than closing over the `draftTag` variable - matters here, not just style: fast/rapid
-  // keystrokes can fire their onChangeText calls before a re-render lands, batched into the same
-  // update, and clamping every one of them against the same stale `draftTag` (captured once at
-  // render time) would let the later ones silently clobber what the earlier ones already clamped
-  // to, rather than each building on the last.
-  const handleTagChange = useCallback((tag: string) => {
-    setDraftTag((previous) => clampTag(previous, tag))
-    setTagManuallySet(true)
-  }, [])
-
-  const confirmDeleteProfile = profiles.find((p) => p.id === confirmDeleteId) ?? null
-  const handleConfirmDelete = useCallback(() => {
-    if (confirmDeleteId) {
-      onDelete(confirmDeleteId)
-      if (editingId === confirmDeleteId) setEditingId(null)
-    }
-    setConfirmDeleteId(null)
-  }, [confirmDeleteId, editingId, onDelete])
 
   // Alphabetical - this list has no other natural order (creation order isn't meaningful to look
   // something up by), and it's the one that actually stays usable once there are more than a
@@ -245,7 +56,7 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
   const rows: Row[] = [...sortedProfiles.map((profile): Row => ({ kind: 'profile', profile })), { kind: 'new' }]
 
   return (
-    <>
+    <View style={styles.screen}>
       <View style={[styles.header, { paddingTop: 8 + insets.top, paddingLeft: 8 + insets.left }]}>
         {headerLeft}
         <Text variant={titleVariant} style={[styles.title, { color: fg }]}>
@@ -253,217 +64,55 @@ export function ProfilesManager({ profiles, defaultColor, onCreate, onSave, onDe
         </Text>
       </View>
 
-      {/* This screen has no keyboard-avoidance of its own on a screen this tall, so this is what
-      actually keeps a focused row's own fields scrollable into view above the keyboard instead of
-      stuck behind it. keyboardShouldPersistTaps='handled' on the ScrollView below is what lets
-      tapping a *different* row (e.g. a color swatch, or another profile entirely) register on the
-      first tap while a field elsewhere is still focused, instead of just dismissing the keyboard. The rows
-      fade out at an edge while there is more past it, the same cue as the Settings sheet and the
-      Achievements screen (Jay, 2026-10-16: every scrolling screen alike). */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.keyboardAvoiding}>
-        {/* A plain View around the scroll view, the same size, for the column the color popover
-        is kept inside (see columnRef): the scroll view takes no ref. */}
-        <View ref={columnRef} collapsable={false} style={styles.column}>
-          <FadingScrollView style={styles.scrollView} contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps='handled'>
-            {rows.map((row) => {
-              if (row.kind === 'new') {
-                if (editingId !== 'new') {
-                  return (
-                    <TouchableRipple key='new' onPress={() => startEdit('new')} style={styles.row}>
-                      <View style={styles.rowInner}>
-                        <View style={[styles.rowChip, styles.newChip, { borderColor: fg }]}>
-                          <Icon source='plus' size={20} color={fg} />
-                        </View>
-                        <Text variant='bodyLarge' style={{ color: fg }}>
-                          New Profile
-                        </Text>
-                      </View>
-                    </TouchableRipple>
-                  )
-                }
-                return <EditRow key='new' draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} autoFocus fgMuted={fgMuted} host={host} dark={dark} colorPreview={colorPreview} useColorPickerAlign={useColorPickerAlign} column={columnRef} renderSwatch={renderSwatch} />
-              }
-
-              const { profile } = row
-              if (editingId === profile.id) {
-                return <EditRow key={profile.id} draftName={draftName} onNameChange={handleNameChange} draftColor={draftColor} onColorChange={setDraftColor} draftTag={draftTag} onTagChange={handleTagChange} onSubmit={commitEdit} onDelete={() => setConfirmDeleteId(profile.id)} fgMuted={fgMuted} host={host} dark={dark} colorPreview={colorPreview} useColorPickerAlign={useColorPickerAlign} column={columnRef} renderSwatch={renderSwatch} />
-              }
-
-              // No delete affordance at rest - tap the row to start editing, which is the one place
-              // delete shows (see EditRow): a deliberate extra step before a destructive action is
-              // even reachable, not just before it's confirmed.
-              return (
-                <TouchableRipple key={profile.id} onPress={() => startEdit(profile)} style={styles.row}>
-                  <View style={styles.rowInner}>
-                    <ProfileChip profile={profile} size={CHIP_SIZE} />
-                    <Text variant='bodyLarge' style={[styles.rowName, { color: fg }]} numberOfLines={1}>
-                      {profile.name}
-                    </Text>
+      {/* The rows fade out at an edge while there is more past it, the same cue as the Settings
+      sheet and the Achievements screen (Jay, 2026-10-16: every scrolling screen alike). */}
+      <FadingScrollView style={styles.screen} contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]} showsVerticalScrollIndicator={false}>
+        {rows.map((row) => {
+          if (row.kind === 'new') {
+            return (
+              <TouchableRipple key='new' onPress={() => onEdit(NEW_PROFILE_ID)} style={styles.row} accessibilityRole='button'>
+                <View style={styles.rowInner}>
+                  <View style={[styles.rowChip, styles.newChip, { borderColor: fg }]}>
+                    <Icon source='plus' size={20} color={fg} />
                   </View>
-                </TouchableRipple>
-              )
-            })}
-          </FadingScrollView>
-        </View>
-      </KeyboardAvoidingView>
+                  <Text variant='bodyLarge' style={{ color: fg }}>
+                    New Profile
+                  </Text>
+                </View>
+              </TouchableRipple>
+            )
+          }
 
-      {/* hud's ConfirmDialog, the one confirm card every app in the fleet uses, so this reads like the
-        Reset Everything?/New Game confirms beside it (Jay, 2026-10-15: one look for every dialog). It
-        used to be its own card here, in this screen's literal black/white (or the host's cardBg), with
-        two stacked contained buttons. */}
-      <ConfirmDialog visible={confirmDeleteProfile !== null} title='Delete Profile?' message={confirmDeleteProfile ? `This permanently deletes ${confirmDeleteProfile.name}\u2019s profile. This cannot be undone.` : ''} confirmLabel='Delete' cancelLabel='Cancel' icon='alert-outline' destructive onConfirm={handleConfirmDelete} onCancel={() => setConfirmDeleteId(null)} />
-    </>
-  )
-}
-
-interface EditRowProps {
-  draftName: string
-  onNameChange: (name: string) => void
-  draftColor: string
-  onColorChange: (color: string) => void
-  draftTag: string
-  onTagChange: (tag: string) => void
-  onSubmit: () => void
-  // Omitted for the 'new' row - nothing saved yet to delete.
-  onDelete?: () => void
-  autoFocus?: boolean
-  fgMuted: string
-  host: PopoverHost
-  dark: boolean
-  colorPreview?: (hex: string) => string
-  useColorPickerAlign?: ProfilesManagerProps['useColorPickerAlign']
-  column: RefObject<ViewInstance | null>
-  renderSwatch?: ProfileSwatchRenderer
-}
-
-// InlineColorPicker with its placement supplied by a host hook (see ProfilesManagerProps.useColorPickerAlign).
-// A component of its own - rather than a conditional hook call inside EditRow - so the hook is always called
-// unconditionally here, and the plain path below stays byte-identical to what it was. Sized exactly as
-// InlineColorPicker sizes itself (the default swatch list at the raw window width), so the host's placement and
-// the popover it positions agree on its footprint.
-function AlignedColorPicker({ useAlign, column, ...props }: ComponentProps<typeof InlineColorPicker> & { useAlign: NonNullable<ProfilesManagerProps['useColorPickerAlign']>; column: EditRowProps['column'] }) {
-  const { width: windowWidth } = useWindowDimensions()
-  const { width, height } = getInlineColorPickerContentSize(defaultColors.length, windowWidth)
-  const alignOverride = useAlign(props.host.openId === props.id, width, height, column)
-  return <InlineColorPicker {...props} alignOverride={alignOverride} />
-}
-
-// One row, expanded: the color trigger (@tastic/hud's InlineColorPicker) - doubling as the tag's
-// own display via its `tag` prop below, since there's no separate visible tag field anymore - an
-// invisible TextInput that exists purely to actually capture what's typed (RN has no way to bring
-// up a keyboard without a real focusable input; this one is just never meant to be *seen*), the
-// name taking up the row's remaining space, and - only for an existing profile - a delete icon at
-// the very end. The two effects below are what wires tapping the swatch to popping the keyboard on
-// the hidden tag field too, so typing a tag and picking a color read as one combined action instead
-// of two separate taps, with the swatch itself as the only place the tag ever visibly shows.
-// Return-key chains tag -> name via @rific/focus-chain rather than each field submitting on its
-// own - submitting the *name* field is what actually commits the row, so its registration's own
-// onSubmitEditing (a no-op - it's last in the chain) is overridden with onSubmit below, matching
-// how a normal multi-field form reads: fill fields in order, the last one finishes it.
-function EditRow({ draftName, onNameChange, draftColor, onColorChange, draftTag, onTagChange, onSubmit, onDelete, autoFocus, fgMuted, host, dark, colorPreview, useColorPickerAlign, column, renderSwatch }: EditRowProps) {
-  // ProfileColorProvider's renderer in the color picker: its trigger is the profile's color with its
-  // tag on it, an identity like a chip, and its grid is where a color is chosen, like a picker's color
-  // page (Hangman draws its triad pies on the grid only).
-  const pickerSwatch = useMemo<InlineColorPickerSwatchRenderer | undefined>(() => (renderSwatch ? (color, size, place) => renderSwatch(color, size, place === 'trigger' ? 'chip' : 'colorPage') : undefined), [renderSwatch])
-  const register = useFocusChain()
-  const tag = register()
-  const name = register()
-
-  // tag.props.focus (from @rific/focus-chain's own register(), not tag.ref - that's a callback
-  // ref, not a ref object, so it has no .current to read) is the hook's own imperative "focus this
-  // exact registered field" call. Mirrored into a ref every render, same as commitEditRef above,
-  // rather than read directly in the effect below: register() returns a brand-new props object on
-  // every render (it isn't memoized), so depending on tag.props.focus directly would rerun that
-  // effect - and refocus an already-focused field - on every keystroke into the tag field itself,
-  // re-triggering its own selectTextOnFocus mid-type and wiping out what's being typed.
-  const tagFocusRef = useRef(tag.props.focus)
-  useEffect(() => {
-    tagFocusRef.current = tag.props.focus
-  })
-
-  // Lets tapping the swatch itself hand focus straight to the tag field, so one tap both opens the
-  // color popover (host.toggle, inside InlineColorPicker's own onPress) and pops the keyboard on
-  // the tag field right next to it. Scoped to host.openId so this only fires on an actual open
-  // transition, not on every re-render while it's already open.
-  useEffect(() => {
-    if (host.openId === 'color') tagFocusRef.current()
-  }, [host.openId])
-
-  return (
-    <View style={styles.editRow}>
-      {useColorPickerAlign ? <AlignedColorPicker useAlign={useColorPickerAlign} column={column} id='color' host={host} value={draftColor} onChange={onColorChange} previewValue={colorPreview} tag={draftTag} dark={dark} renderSwatch={pickerSwatch} /> : <InlineColorPicker id='color' host={host} value={draftColor} onChange={onColorChange} previewValue={colorPreview} tag={draftTag} dark={dark} renderSwatch={pickerSwatch} bounds={column} />}
-      {/* Invisible on purpose (styles.hiddenTagInput: zero footprint, position: 'absolute' so it
-      doesn't reserve space in the row's own flex layout) - the swatch above is the only place this
-      value is ever meant to be seen. pointerEvents='none' is what actually keeps it out of the
-      way: without it, this field - even at 1x1 and fully transparent - still sits in front of the
-      swatch for hit-testing purposes and swallows the tap meant to open the color popover, since
-      focusing this field is never done by tapping it directly anyway (see the effect above, which
-      focuses it programmatically). accessibilityLabel stands in for the placeholder a visible field
-      would have had, so a screen reader still identifies it, and so this file's own tests can still
-      find it as "Tag" the same way they find the Name field by its placeholder. selectTextOnFocus
-      so re-tapping the swatch to revise an already-set tag replaces it wholesale rather than
-      inserting mid-string. */}
-      {}
-      <TextInput ref={textInputRef(tag.ref)} {...tag.props} value={draftTag} onChangeText={onTagChange} accessibilityLabel='Tag' autoCapitalize='characters' selectTextOnFocus returnKeyType='next' style={styles.hiddenTagInput} pointerEvents='none' />
-      {}
-      <TextInput ref={textInputRef(name.ref)} {...name.props} onSubmitEditing={onSubmit} mode='outlined' dense value={draftName} onChangeText={onNameChange} maxLength={MAX_PROFILE_NAME_LENGTH} placeholder='Name' autoFocus={autoFocus} returnKeyType='done' style={styles.nameInput} />
-      {onDelete && (
-        <TouchableRipple onPress={onDelete} style={styles.iconButton}>
-          <Icon source='trash-can-outline' size={18} color={fgMuted} />
-        </TouchableRipple>
-      )}
+          // No delete at rest - tap the row to open its screen, which is the one place delete
+          // shows: a deliberate extra step before a destructive action is even reachable, not just
+          // before it's confirmed.
+          const { profile } = row
+          return (
+            <TouchableRipple key={profile.id} onPress={() => onEdit(profile.id)} style={styles.row} accessibilityRole='button'>
+              <View style={styles.rowInner}>
+                <ProfileChip profile={profile} size={CHIP_SIZE} />
+                <Text variant='bodyLarge' style={[styles.rowName, { color: fg }]} numberOfLines={1}>
+                  {profile.name}
+                </Text>
+              </View>
+            </TouchableRipple>
+          )
+        })}
+      </FadingScrollView>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  // The roster's column, around the scroll view (see columnRef).
-  column: {
-    flex: 1
-  },
   content: {
     gap: 4,
     paddingHorizontal: 20
-  },
-  // zIndex: the color popover lives inside this row, and a zIndex only orders siblings of one parent
-  // (React Native Web also gives every positioned view its own stacking context), so the popover's
-  // own zIndex never reached the rows after this one: they were drawn over it (a Kid row and the New
-  // Profile row across the swatches, 2026-10-16). Raising the row lifts the popover with it. There
-  // is only ever one edit row.
-  editRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    paddingVertical: 6,
-    zIndex: 1
   },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 4,
     paddingBottom: 8
-  },
-  // 1x1 and fully transparent - there's nothing to see here on purpose (see EditRow's own comment
-  // above the field this styles). position: 'absolute' pulls it out of editRow's flex flow
-  // entirely, so it doesn't reserve a gap in the row the way a normal flex sibling would.
-  hiddenTagInput: {
-    height: 1,
-    opacity: 0,
-    position: 'absolute',
-    width: 1
-  },
-  iconButton: {
-    alignItems: 'center',
-    borderRadius: 8,
-    height: 36,
-    justifyContent: 'center',
-    width: 36
-  },
-  keyboardAvoiding: {
-    flex: 1
-  },
-  nameInput: {
-    flex: 1
   },
   newChip: {
     backgroundColor: 'transparent',
@@ -489,7 +138,7 @@ const styles = StyleSheet.create({
   rowName: {
     flex: 1
   },
-  scrollView: {
+  screen: {
     flex: 1
   },
   title: {

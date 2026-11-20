@@ -1,70 +1,43 @@
-import { defaultColors, FadingScrollView, useAutoPaperTheme } from '@rific/auto-paper'
+import { FadingScrollView, useAutoPaperTheme } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
-import { useToast } from '@rific/toaster'
-import { ConfirmDialog, getInlineColorPickerContentSize, InlineColorPicker } from '@tastic/hud/chrome'
 import { act, render } from '@testing-library/react'
-import { createRef } from 'react'
-import { View } from 'react-native'
-import { Icon, Text, TextInput } from 'react-native-paper'
+import { Text } from 'react-native-paper'
 
+import { NEW_PROFILE_ID } from '../EditProfileScreen'
 import { ProfileChip } from '../ProfileChip'
-import { ProfileColorProvider } from '../ProfileColorContext'
-import { ProfilesManager, ProfilesManagerHandle, ProfilesManagerProps } from '../ProfilesManager'
+import { ProfilesManager, ProfilesManagerProps } from '../ProfilesManager'
 import { Profile } from '../types'
 
-// ProfileChip is this screen's only child component (see ProfilesManager's own imports) - mocked
-// down to a jest.fn() the same way this fleet mocks any child, so a roster row's own props to it
-// (which profile, what size) can be asserted directly instead of trying to render through it.
+// ProfileChip is the list's only child component - mocked down to a jest.fn() the same way this fleet
+// mocks any child, so a row's props to it (which profile, what size) can be asserted directly.
 jest.mock('../ProfileChip', () => ({
   ProfileChip: jest.fn(() => null)
 }))
 
-// Everything below is a real dependency ProfilesManager pulls in from outside this package
-// (@rific/*, @tastic/hud, react-native-safe-area-context) that isn't already mocked by this repo's
-// own src/__mocks__ (those only cover 'react-native'/'react-native-paper'). None of it is this
-// file's own logic to verify, so each is stubbed down to the same jest.fn() shape this fleet mocks
-// react-native-paper's own Icon/Text with - a local jest.mock() here, scoped to this test file only,
-// same as ColorPicker.test.tsx in the sibling React-Native-Auto-Paper package does for its own
-// one-off '../components/Dialog' mock.
-jest.mock('@rific/auto-paper', () => ({
-  useAutoPaperTheme: jest.fn(),
-  // A pass-through, like the react-native mock's ScrollView below.
-  FadingScrollView: jest.fn(({ children }: any) => children ?? null),
-  // Only the LENGTH matters here (the swatch popover is sized from it) - 20, like the real default list.
-  defaultColors: Array.from({ length: 20 }, (_, i) => ({ name: `color-${i}`, value: `#0000${String(i).padStart(2, '0')}` }))
-}))
-
-jest.mock('@rific/feedback-press', () => ({
-  TouchableRipple: jest.fn(({ children }: any) => children ?? null)
+// EditProfileScreen is imported for NEW_PROFILE_ID only; its own dependencies (hud, the toaster) are
+// stubbed so loading it here doesn't need them. Its own suite is EditProfileScreen.test.tsx.
+jest.mock('@tastic/hud/chrome', () => ({
+  ConfirmDialog: jest.fn(() => null)
 }))
 
 jest.mock('@rific/toaster', () => ({
   useToast: jest.fn()
 }))
 
-jest.mock('@tastic/hud/chrome', () => {
-  // jest.mock factories can't close over module-level imports (hoisted above them), hence its own
-  // require - cast to the real module type so the generics below still typecheck (a bare require()
-  // types as `any`, and TS rejects explicit type arguments on an untyped call).
-  const { useCallback, useState } = require('react') as typeof import('react')
+jest.mock('@rific/auto-paper', () => ({
+  useAutoPaperTheme: jest.fn(),
+  // A pass-through, like the react-native mock's ScrollView.
+  FadingScrollView: jest.fn(({ children }: any) => children ?? null),
+  getContrastColor: jest.fn(() => '#FFFFFF'),
+  defaultColors: []
+}))
+
+jest.mock('@rific/feedback-press', () => {
+  const stub = ({ children }: any) => children ?? null
   return {
-    // hud's real confirm card (its own tests cover it); here only the props it was handed matter.
-    ConfirmDialog: jest.fn(() => null),
-    InlineColorPicker: jest.fn(() => null),
-    // A deterministic stand-in for hud's pure sizing helper, so a test can predict exactly what the placement hook is
-    // handed: (swatchCount, windowWidth) -> { width, height }.
-    getInlineColorPickerContentSize: jest.fn((swatchCount: number, windowWidth: number) => ({ width: 100 + swatchCount, height: 10 + windowWidth })),
-    // A faithful, self-contained reimplementation of the real hook (see @tastic/hud's own
-    // usePopoverHost.ts) - not jest.requireActual('@tastic/hud/chrome'), which would also eagerly
-    // evaluate every other module the chrome entry re-exports. Needs to be genuinely stateful (not a
-    // static { openId: null, ... } stub) so the focus-follows-open tests below can drive
-    // host.openId through a real open/close transition.
-    usePopoverHost: jest.fn(() => {
-      const [openId, setOpenId] = useState<string | null>(null)
-      const toggle = useCallback((id: string) => setOpenId((prev: string | null) => (prev === id ? null : id)), [])
-      const close = useCallback(() => setOpenId(null), [])
-      return { openId, toggle, close }
-    })
+    Button: jest.fn(stub),
+    IconButton: jest.fn(() => null),
+    TouchableRipple: jest.fn(stub)
   }
 })
 
@@ -72,32 +45,6 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: jest.fn(() => ({ top: 0, bottom: 0, left: 0, right: 0 }))
 }))
 
-// This repo's own src/__mocks__/react-native.ts doesn't export KeyboardAvoidingView (nothing else
-// tested so far needed it) - ProfilesManager renders one unconditionally, so this file needs its
-// own override that adds it, alongside the same View/ScrollView/StyleSheet/Platform stubs the
-// shared mock already provides.
-jest.mock('react-native', () => {
-  const stub = ({ children }: any) => children ?? null
-  return {
-    StyleSheet: {
-      create: (styles: any) => styles,
-      flatten: (style: unknown) => style,
-      absoluteFill: {},
-      hairlineWidth: 1
-    },
-    Platform: {
-      OS: 'ios',
-      select: (spec: any) => spec.ios ?? spec.default
-    },
-    View: jest.fn(stub),
-    ScrollView: jest.fn(stub),
-    KeyboardAvoidingView: jest.fn(stub),
-    useWindowDimensions: jest.fn(() => ({ width: 402, height: 874, scale: 3, fontScale: 1 }))
-  }
-})
-
-// Likewise, the shared react-native-paper mock only covers Icon/IconButton/Text - ProfilesManager
-// also renders TextInput, so this file needs its own override adding it.
 jest.mock('react-native-paper', () => {
   const stub = ({ children }: any) => children ?? null
   return {
@@ -108,18 +55,9 @@ jest.mock('react-native-paper', () => {
 })
 
 const mockUseAutoPaperTheme = useAutoPaperTheme as jest.MockedFunction<typeof useAutoPaperTheme>
-const mockUseToast = useToast as jest.MockedFunction<typeof useToast>
 const mockTouchableRipple = TouchableRipple as jest.MockedFunction<typeof TouchableRipple>
-const mockInlineColorPicker = InlineColorPicker as jest.MockedFunction<typeof InlineColorPicker>
-const mockTextInput = TextInput as jest.MockedFunction<typeof TextInput>
 const mockText = Text as jest.MockedFunction<typeof Text>
 const mockProfileChip = ProfileChip as jest.MockedFunction<typeof ProfileChip>
-
-const DANGER_COLOR = '#B00020'
-const ON_DANGER_COLOR = '#FFFFFF'
-const DEFAULT_COLOR = '#00AAFF'
-
-const mockErrorToast = jest.fn()
 
 function createProfile(overrides: Partial<Profile> = {}): Profile {
   return {
@@ -133,13 +71,6 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
   }
 }
 
-// -- mock-tree inspection helpers ---------------------------------------------------------------
-// View/Text/Icon/TouchableRipple/etc are all stubbed down to jest.fn()s above, so - same
-// convention as IconButton.test.tsx/ColorPicker.test.tsx in the sibling React-Native-Auto-Paper
-// package - a row's own onPress/onChangeText/onSubmitEditing is read straight out of the relevant
-// mock's own .mock.calls and invoked directly, rather than trying to query rendered DOM text out
-// of an intentionally-flattened tree.
-
 function flattenText(node: any): string {
   if (node === null || node === undefined || typeof node === 'boolean') return ''
   if (typeof node === 'string' || typeof node === 'number') return String(node)
@@ -148,75 +79,13 @@ function flattenText(node: any): string {
   return ''
 }
 
-function findNode(node: any, predicate: (n: any) => boolean): any {
-  if (node === null || node === undefined) return null
-  if (predicate(node)) return node
-  if (Array.isArray(node)) {
-    for (const child of node) {
-      const found = findNode(child, predicate)
-      if (found) return found
-    }
-    return null
-  }
-  if (typeof node === 'object' && 'props' in node) return findNode(node.props?.children, predicate)
-  return null
-}
-
-// Undefined when no such row was ever rendered - used for both "find the row to press" and "assert
-// this row isn't there" (e.g. no delete affordance on the 'new' row).
-function queryTouchableRippleByText(text: string): any {
+function findTouchableRippleByText(text: string): any {
   const calls = mockTouchableRipple.mock.calls
   for (let i = calls.length - 1; i >= 0; i--) {
     const props = calls[i][0] as any
     if (flattenText(props.children).includes(text)) return props
   }
-  return undefined
-}
-
-function findTouchableRippleByText(text: string): any {
-  const found = queryTouchableRippleByText(text)
-  if (!found) throw new Error(`No TouchableRipple renders text "${text}"`)
-  return found
-}
-
-function queryDeleteToggle(): any {
-  const calls = mockTouchableRipple.mock.calls
-  for (let i = calls.length - 1; i >= 0; i--) {
-    const props = calls[i][0] as any
-    if (findNode(props.children, (n) => n?.type === Icon && n?.props?.source === 'trash-can-outline')) return props
-  }
-  return undefined
-}
-
-// Matches by placeholder (the Name field) or accessibilityLabel (the Tag field, which has no
-// placeholder of its own since it's invisible - see EditRow's own comment on why) so callers can
-// look a field up by "Name"/"Tag" either way, the same as before this field stopped being visible.
-function lastTextInputProps(label: string): any {
-  const calls = mockTextInput.mock.calls
-  for (let i = calls.length - 1; i >= 0; i--) {
-    const props = calls[i][0] as any
-    if (props.placeholder === label || props.accessibilityLabel === label) return props
-  }
-  throw new Error(`No TextInput renders placeholder/accessibilityLabel "${label}"`)
-}
-
-function lastInlineColorPickerValue(): string {
-  const calls = mockInlineColorPicker.mock.calls
-  return (calls[calls.length - 1][0] as any).value
-}
-
-function lastInlineColorPickerTag(): string {
-  const calls = mockInlineColorPicker.mock.calls
-  return (calls[calls.length - 1][0] as any).tag
-}
-
-function lastInlineColorPickerHost(): any {
-  const calls = mockInlineColorPicker.mock.calls
-  return (calls[calls.length - 1][0] as any).host
-}
-
-function lastConfirmProps(): any {
-  return (ConfirmDialog as jest.Mock).mock.lastCall![0]
+  throw new Error(`No TouchableRipple renders text "${text}"`)
 }
 
 function hasTextContaining(...fragments: string[]): boolean {
@@ -227,17 +96,14 @@ function hasTextContaining(...fragments: string[]): boolean {
 }
 
 function renderManager(overrides: Partial<ProfilesManagerProps> = {}) {
-  const onCreate = jest.fn()
-  const onSave = jest.fn()
-  const onDelete = jest.fn()
-  const utils = render(<ProfilesManager profiles={[]} defaultColor={DEFAULT_COLOR} onCreate={onCreate} onSave={onSave} onDelete={onDelete} {...overrides} />)
-  return { ...utils, onCreate, onSave, onDelete }
+  const onEdit = jest.fn()
+  const utils = render(<ProfilesManager profiles={[]} onEdit={onEdit} {...overrides} />)
+  return { ...utils, onEdit }
 }
 
 beforeEach(() => {
   jest.clearAllMocks()
-  mockUseAutoPaperTheme.mockReturnValue({ dark: false, colors: { danger: DANGER_COLOR, onDanger: ON_DANGER_COLOR } } as any)
-  mockUseToast.mockReturnValue({ error: mockErrorToast } as any)
+  mockUseAutoPaperTheme.mockReturnValue({ dark: false } as any)
 })
 
 describe('ProfilesManager', () => {
@@ -259,408 +125,38 @@ describe('ProfilesManager', () => {
   })
 
   // The Settings sheet's and the Achievements screen's edge fade, so every scrolling screen in the fleet reads the same.
-  it('scrolls its rows in a FadingScrollView that keeps a tap on another row while a field is focused', () => {
+  it('scrolls its rows in a FadingScrollView with no indicator', () => {
     renderManager({ profiles: [createProfile({ id: 'a', name: 'Alice' })] })
-
-    const props = (FadingScrollView as unknown as jest.Mock).mock.lastCall![0]
-    expect(props.keyboardShouldPersistTaps).toBe('handled')
-    expect(props.showsVerticalScrollIndicator).toBe(false)
-    expect(mockTouchableRipple.mock.calls.map(([rowProps]) => flattenText((rowProps as any).children))).toEqual(['Alice', 'New Profile'])
+    expect((FadingScrollView as unknown as jest.Mock).mock.lastCall![0].showsVerticalScrollIndicator).toBe(false)
   })
 
-  it('previews swatches through ProfileColorProvider when no colorPreview prop is passed, and lets the prop win', () => {
-    const contextPreview = (hex: string) => `muted(${hex})`
-    const propPreview = (hex: string) => `prop(${hex})`
-    const lastPreviewValue = () => (mockInlineColorPicker.mock.calls[mockInlineColorPicker.mock.calls.length - 1][0] as { previewValue?: unknown }).previewValue
-
-    const { unmount } = render(
-      <ProfileColorProvider preview={contextPreview}>
-        <ProfilesManager profiles={[]} defaultColor={DEFAULT_COLOR} onCreate={jest.fn()} onSave={jest.fn()} onDelete={jest.fn()} />
-      </ProfileColorProvider>
-    )
-    act(() => findTouchableRippleByText('New Profile').onPress())
-    expect(lastPreviewValue()).toBe(contextPreview)
-    unmount()
-
-    render(
-      <ProfileColorProvider preview={contextPreview}>
-        <ProfilesManager profiles={[]} defaultColor={DEFAULT_COLOR} onCreate={jest.fn()} onSave={jest.fn()} onDelete={jest.fn()} colorPreview={propPreview} />
-      </ProfileColorProvider>
-    )
-    act(() => findTouchableRippleByText('New Profile').onPress())
-    expect(lastPreviewValue()).toBe(propPreview)
-  })
-
-  // ProfileColorProvider's renderSwatch reaches hud's color picker too (Hangman's triad pies): its
-  // trigger as a chip (the profile's tag is on it), its grid as the place a color is chosen.
-  it("hands the color picker ProfileColorProvider's swatch renderer, its trigger as a chip and its grid as a color page", () => {
-    const renderSwatch = jest.fn(() => null)
-    render(
-      <ProfileColorProvider renderSwatch={renderSwatch}>
-        <ProfilesManager profiles={[]} defaultColor={DEFAULT_COLOR} onCreate={jest.fn()} onSave={jest.fn()} onDelete={jest.fn()} />
-      </ProfileColorProvider>
-    )
-    act(() => findTouchableRippleByText('New Profile').onPress())
-    const pickerSwatch = (mockInlineColorPicker.mock.lastCall![0] as { renderSwatch?: (color: string, size: number, place: 'trigger' | 'swatch') => unknown }).renderSwatch!
-    pickerSwatch('#112233', 48, 'trigger')
-    pickerSwatch('#445566', 28, 'swatch')
-    expect(renderSwatch).toHaveBeenNthCalledWith(1, '#112233', 48, 'chip')
-    expect(renderSwatch).toHaveBeenNthCalledWith(2, '#445566', 28, 'colorPage')
-  })
-
-  it('draws flat swatches without a renderer', () => {
-    renderManager()
-    act(() => findTouchableRippleByText('New Profile').onPress())
-    expect((mockInlineColorPicker.mock.lastCall![0] as { renderSwatch?: unknown }).renderSwatch).toBeUndefined()
-  })
-
-  // The popover opens inside the roster's scroll view, which clips it: the color picker keeps it inside.
-  it("keeps the color popover inside the roster's column", () => {
-    renderManager()
-    act(() => findTouchableRippleByText('New Profile').onPress())
-    const bounds = (mockInlineColorPicker.mock.lastCall![0] as { bounds?: unknown }).bounds
-    const column = (View as unknown as jest.Mock).mock.calls.map((call) => call[0] as { ref?: unknown; children?: any }).find((props) => props.ref === bounds)
-    expect(column?.children?.type).toBe(FadingScrollView)
-  })
-
-  it('tapping New Profile opens a blank draft with no delete affordance', () => {
-    renderManager()
-    act(() => findTouchableRippleByText('New Profile').onPress())
-
-    expect(lastInlineColorPickerValue()).toBe(DEFAULT_COLOR)
-    expect(lastTextInputProps('Name').value).toBe('')
-    expect(lastTextInputProps('Name').autoFocus).toBe(true)
-    expect(lastTextInputProps('Tag').value).toBe('')
-    expect(queryDeleteToggle()).toBeUndefined()
-  })
-
-  it('tapping an existing profile opens its draft prefilled, with a delete affordance', () => {
-    const alice = createProfile({ id: 'a', name: 'Alice', color: '#654321', tag: 'AL' })
-    renderManager({ profiles: [alice] })
-    act(() => findTouchableRippleByText('Alice').onPress())
-
-    expect(lastInlineColorPickerValue()).toBe('#654321')
-    expect(lastTextInputProps('Name').value).toBe('Alice')
-    expect(lastTextInputProps('Name').autoFocus).toBeFalsy()
-    expect(lastTextInputProps('Tag').value).toBe('AL')
-    expect(queryDeleteToggle()).toBeTruthy()
-  })
-
-  it('submitting a new profile calls onCreate with its derived tag, then closes the row', () => {
-    const { onCreate, onSave } = renderManager()
-    act(() => findTouchableRippleByText('New Profile').onPress())
-    act(() => lastTextInputProps('Name').onChangeText('Daisy'))
-    // Text is always re-rendered on any state change of this component (the header alone
-    // guarantees a fresh call every render) - checking it grew is what rules out "submit silently
-    // did nothing" rather than "the row closed", which an unchanged InlineColorPicker count alone
-    // can't tell apart.
-    const textCallsBeforeCommit = mockText.mock.calls.length
-    const colorPickerCallsBeforeCommit = mockInlineColorPicker.mock.calls.length
-
-    act(() => lastTextInputProps('Name').onSubmitEditing())
-
-    expect(onCreate).toHaveBeenCalledTimes(1)
-    expect(onCreate).toHaveBeenCalledWith({ name: 'Daisy', color: DEFAULT_COLOR, tag: 'D' })
-    expect(onSave).not.toHaveBeenCalled()
-    expect(mockText.mock.calls.length).toBeGreaterThan(textCallsBeforeCommit)
-    // No EditRow left open anywhere - InlineColorPicker only ever renders inside one.
-    expect(mockInlineColorPicker.mock.calls.length).toBe(colorPickerCallsBeforeCommit)
-  })
-
-  it('deriving the tag from the name stops once the tag field is edited directly', () => {
-    const { onCreate } = renderManager()
-    act(() => findTouchableRippleByText('New Profile').onPress())
-
-    act(() => lastTextInputProps('Name').onChangeText('Erin'))
-    expect(lastTextInputProps('Tag').value).toBe('E')
-
-    act(() => lastTextInputProps('Tag').onChangeText('XY'))
-    act(() => lastTextInputProps('Name').onChangeText('Erina'))
-    expect(lastTextInputProps('Tag').value).toBe('XY')
-
-    act(() => lastTextInputProps('Name').onSubmitEditing())
-    expect(onCreate).toHaveBeenCalledWith({ name: 'Erina', color: DEFAULT_COLOR, tag: 'XY' })
-  })
-
-  it('submitting an edited existing profile calls onSave, preserving its already-set tag', () => {
-    const alice = createProfile({ id: 'a', name: 'Alice', color: '#654321', tag: 'AL' })
-    const { onSave } = renderManager({ profiles: [alice] })
-    act(() => findTouchableRippleByText('Alice').onPress())
-
-    act(() => lastTextInputProps('Name').onChangeText('Alicia'))
-    act(() => lastTextInputProps('Name').onSubmitEditing())
-
-    expect(onSave).toHaveBeenCalledTimes(1)
-    expect(onSave).toHaveBeenCalledWith('a', { name: 'Alicia', color: '#654321', tag: 'AL' })
-  })
-
-  // clampTag (see profilesValidation.ts/its own test suite) prevents typing your way into an
-  // invalid tag through this field's own onChangeText, so this now exercises commitEdit's
-  // defensive check via an already-invalid tag loaded straight from a profile's stored data - a
-  // legacy/corrupted value, or one synced in from another app's own looser rules - never touched
-  // through the tag field itself.
-  it('drops an invalid tag loaded from storage to empty on save and surfaces an error toast', () => {
-    const alice = createProfile({ id: 'a', name: 'Alice', color: '#654321', tag: 'WXYZ' })
-    const { onSave } = renderManager({ profiles: [alice] })
-    act(() => findTouchableRippleByText('Alice').onPress())
-
-    act(() => lastTextInputProps('Name').onSubmitEditing())
-
-    expect(mockErrorToast).toHaveBeenCalledWith('Invalid tag', 'Use up to 3 letters or a single emoji')
-    expect(onSave).toHaveBeenCalledWith('a', { name: 'Alice', color: '#654321', tag: '' })
-  })
-
-  it("clamps the tag field's live typing - rejects a keystroke past 3 characters, and a second emoji replaces the first", () => {
-    renderManager()
-    act(() => findTouchableRippleByText('New Profile').onPress())
-
-    act(() => lastTextInputProps('Tag').onChangeText('ABC'))
-    expect(lastTextInputProps('Tag').value).toBe('ABC')
-    act(() => lastTextInputProps('Tag').onChangeText('ABCD'))
-    expect(lastTextInputProps('Tag').value).toBe('ABC')
-
-    act(() => lastTextInputProps('Tag').onChangeText('😎'))
-    expect(lastTextInputProps('Tag').value).toBe('😎')
-    act(() => lastTextInputProps('Tag').onChangeText('😎🔥'))
-    expect(lastTextInputProps('Tag').value).toBe('🔥')
-  })
-
-  // Without this, the hidden field - even at 1x1 and fully transparent - would still sit in front
-  // of the swatch for hit-testing purposes and swallow the tap meant to open the color popover,
-  // since focusing it is always done programmatically (see EditRow's own focus effect), never by
-  // tapping the field directly.
-  it('the hidden tag field never intercepts touches, so it cannot block the swatch underneath', () => {
-    renderManager()
-    act(() => findTouchableRippleByText('New Profile').onPress())
-
-    expect(lastTextInputProps('Tag').pointerEvents).toBe('none')
-  })
-
-  it('submitting an empty name discards the draft without calling onCreate, and closes the row', () => {
-    const { onCreate } = renderManager()
-    act(() => findTouchableRippleByText('New Profile').onPress())
-    const textCallsBeforeCommit = mockText.mock.calls.length
-    const colorPickerCallsBeforeCommit = mockInlineColorPicker.mock.calls.length
-
-    act(() => lastTextInputProps('Name').onSubmitEditing())
-
-    expect(onCreate).not.toHaveBeenCalled()
-    expect(mockText.mock.calls.length).toBeGreaterThan(textCallsBeforeCommit)
-    expect(mockInlineColorPicker.mock.calls.length).toBe(colorPickerCallsBeforeCommit)
-    expect(queryTouchableRippleByText('New Profile')).toBeTruthy()
-  })
-
-  it('starting to edit a different row commits whatever draft was already open', () => {
-    const alice = createProfile({ id: 'a', name: 'Alice', color: '#111111', tag: '' })
-    const bob = createProfile({ id: 'b', name: 'Bob', color: '#222222', tag: '' })
-    const { onSave } = renderManager({ profiles: [alice, bob] })
-
-    act(() => findTouchableRippleByText('Alice').onPress())
-    act(() => lastTextInputProps('Name').onChangeText('Alicia'))
-    act(() => findTouchableRippleByText('Bob').onPress())
-
-    expect(onSave).toHaveBeenCalledWith('a', { name: 'Alicia', color: '#111111', tag: 'A' })
-    // Bob's own draft is what's open now, not left showing Alice's.
-    expect(lastTextInputProps('Name').value).toBe('Bob')
-    expect(lastInlineColorPickerValue()).toBe('#222222')
-  })
-
-  // hud's ConfirmDialog (Jay, 2026-10-15: one confirm card for the whole fleet), destructive, so its
-  // header and Delete button take the danger role.
-  it("the delete icon opens hud's destructive confirmation naming the profile", () => {
+  // The Edit Profile screen is the game's own route (Jay, 2026-11-20): the list only asks for it.
+  it("opens a profile's Edit Profile screen through onEdit with its id, and New Profile with NEW_PROFILE_ID", () => {
     const alice = createProfile({ id: 'a', name: 'Alice' })
-    renderManager({ profiles: [alice] })
-    expect(lastConfirmProps().visible).toBe(false)
+    const { onEdit } = renderManager({ profiles: [alice] })
+
     act(() => findTouchableRippleByText('Alice').onPress())
-    act(() => queryDeleteToggle().onPress())
+    expect(onEdit).toHaveBeenLastCalledWith('a')
 
-    expect(lastConfirmProps()).toMatchObject({ visible: true, title: 'Delete Profile?', icon: 'alert-outline', destructive: true, confirmLabel: 'Delete', cancelLabel: 'Cancel' })
-    expect(lastConfirmProps().message).toBe('This permanently deletes Alice\u2019s profile. This cannot be undone.')
+    act(() => findTouchableRippleByText('New Profile').onPress())
+    expect(onEdit).toHaveBeenLastCalledWith(NEW_PROFILE_ID)
+    expect(onEdit).toHaveBeenCalledTimes(2)
   })
 
-  it('cancelling the delete confirmation leaves the profile untouched', () => {
-    const alice = createProfile({ id: 'a', name: 'Alice' })
-    const { onDelete } = renderManager({ profiles: [alice] })
-    act(() => findTouchableRippleByText('Alice').onPress())
-    act(() => queryDeleteToggle().onPress())
-    act(() => lastConfirmProps().onCancel())
-
-    expect(onDelete).not.toHaveBeenCalled()
-    expect(lastConfirmProps().visible).toBe(false)
-  })
-
-  it('confirming delete calls onDelete and closes the row that was being edited', () => {
-    const alice = createProfile({ id: 'a', name: 'Alice' })
-    const { onDelete } = renderManager({ profiles: [alice] })
-    act(() => findTouchableRippleByText('Alice').onPress())
-    act(() => queryDeleteToggle().onPress())
-    const colorPickerCallsBeforeCommit = mockInlineColorPicker.mock.calls.length
-
-    act(() => lastConfirmProps().onConfirm())
-
-    expect(onDelete).toHaveBeenCalledWith('a')
-    expect(lastConfirmProps().visible).toBe(false)
-    // The row being edited when its own delete was confirmed closes along with it.
-    expect(mockInlineColorPicker.mock.calls.length).toBe(colorPickerCallsBeforeCommit)
-  })
-
-  it('unmounting mid-edit flushes the pending draft through onSave', () => {
-    const alice = createProfile({ id: 'a', name: 'Alice', color: '#111111', tag: '' })
-    const { onSave, unmount } = renderManager({ profiles: [alice] })
-    act(() => findTouchableRippleByText('Alice').onPress())
-    act(() => lastTextInputProps('Name').onChangeText('Alicia'))
-
-    unmount()
-
-    expect(onSave).toHaveBeenCalledWith('a', { name: 'Alicia', color: '#111111', tag: 'A' })
-  })
-
-  // The react-navigation-web case: a host's screen is hidden, not unmounted, when its router pops
-  // it, so the unmount effect above never fires there - commitPendingEdit is the explicit escape
-  // hatch a host calls instead, from its own back-button handler, right before navigating away.
-  it('commitPendingEdit flushes the pending draft through onSave, for hosts whose navigation does not unmount this component', () => {
-    const alice = createProfile({ id: 'a', name: 'Alice', color: '#111111', tag: '' })
-    const ref = createRef<ProfilesManagerHandle>()
-    const { onSave } = renderManager({ profiles: [alice], ref })
-    act(() => findTouchableRippleByText('Alice').onPress())
-    act(() => lastTextInputProps('Name').onChangeText('Alicia'))
-
-    act(() => ref.current?.commitPendingEdit())
-
-    expect(onSave).toHaveBeenCalledWith('a', { name: 'Alicia', color: '#111111', tag: 'A' })
-  })
-
-  it('commitPendingEdit is a safe no-op when nothing is being edited', () => {
-    const ref = createRef<ProfilesManagerHandle>()
-    const { onCreate, onSave } = renderManager({ ref })
-
-    expect(() => act(() => ref.current?.commitPendingEdit())).not.toThrow()
-    expect(onCreate).not.toHaveBeenCalled()
-    expect(onSave).not.toHaveBeenCalled()
-  })
-
-  it('shows the tag live on the color trigger as it changes', () => {
+  it('draws its text in fg, black on light and white on dark by default', () => {
     renderManager()
-    act(() => findTouchableRippleByText('New Profile').onPress())
-    expect(lastInlineColorPickerTag()).toBe('')
+    const title = () =>
+      mockText.mock.calls
+        .map(([props]) => props as any)
+        .filter((props) => flattenText(props.children) === 'Profiles')
+        .pop()
+    expect(title().style).toEqual(expect.arrayContaining([{ color: '#000000' }]))
 
-    act(() => lastTextInputProps('Tag').onChangeText('XY'))
-    expect(lastInlineColorPickerTag()).toBe('XY')
-  })
-
-  // tag.ref is captured straight off TextInput's mocked props here - React 19 passes `ref` through
-  // as a normal prop to a plain (non-forwardRef) function component, same as @rific/focus-chain's
-  // own useFocusChain.test.ts does with its raw { focus: mockFocus } fake.
-  it('opening the color popover focuses the tag field', () => {
+    mockUseAutoPaperTheme.mockReturnValue({ dark: true } as any)
     renderManager()
-    act(() => findTouchableRippleByText('New Profile').onPress())
+    expect(title().style).toEqual(expect.arrayContaining([{ color: '#FFFFFF' }]))
 
-    const mockFocus = jest.fn()
-    lastTextInputProps('Tag').ref({ focus: mockFocus })
-
-    act(() => lastInlineColorPickerHost().toggle('color'))
-
-    expect(mockFocus).toHaveBeenCalledTimes(1)
-  })
-
-  it('closing the color popover does not refocus the tag field', () => {
-    renderManager()
-    act(() => findTouchableRippleByText('New Profile').onPress())
-
-    const mockFocus = jest.fn()
-    lastTextInputProps('Tag').ref({ focus: mockFocus })
-    const host = lastInlineColorPickerHost()
-    act(() => host.toggle('color'))
-    mockFocus.mockClear()
-
-    act(() => host.toggle('color')) // toggling the same id again closes it
-
-    expect(mockFocus).not.toHaveBeenCalled()
-  })
-})
-
-// A host inside a fake-rotated frame supplies the swatch popover's placement through `useColorPickerAlign` (see its doc on
-// ProfilesManagerProps): hud's own placement measures along the wrong axes there.
-describe('ProfilesManager: edit row stacking', () => {
-  // The color popover renders inside the edit row, so the row itself has to out-stack the rows after
-  // it, or they're drawn over the open swatches (seen in Solitaire, 2026-10-16).
-  it('raises the edit row above the rows after it', () => {
-    const alice = createProfile({ id: 'a', name: 'Alice' })
-    const bob = createProfile({ id: 'b', name: 'Bob' })
-    renderManager({ profiles: [alice, bob] })
-    act(() => findTouchableRippleByText('Alice').onPress())
-
-    const editRow = (View as unknown as jest.Mock).mock.calls
-      .map((call) => call[0] as { style?: unknown; children?: unknown })
-      .filter((props) => findNode(props.children, (n) => n?.type === InlineColorPicker))
-      .pop()
-    expect(editRow?.style).toEqual(expect.objectContaining({ zIndex: 1 }))
-  })
-})
-
-describe('ProfilesManager: useColorPickerAlign', () => {
-  const placement = { align: 'left', verticalAlign: 'above', maxHeight: 123, measured: true, triggerRef: { current: null } } as const
-  const lastInlineColorPickerProps = (): any => {
-    const calls = mockInlineColorPicker.mock.calls
-    return calls[calls.length - 1][0]
-  }
-  const mockGetContentSize = getInlineColorPickerContentSize as jest.MockedFunction<typeof getInlineColorPickerContentSize>
-
-  it("hands InlineColorPicker no alignOverride when the prop is omitted (today's behaviour)", () => {
-    renderManager()
-    act(() => findTouchableRippleByText('New Profile').onPress())
-
-    expect(lastInlineColorPickerProps().alignOverride).toBeUndefined()
-    expect(mockGetContentSize).not.toHaveBeenCalled()
-  })
-
-  it("calls the hook with the popover's open state and its content size, and passes the result as InlineColorPicker's alignOverride", () => {
-    const useColorPickerAlign = jest.fn(() => placement)
-    renderManager({ useColorPickerAlign })
-    act(() => findTouchableRippleByText('New Profile').onPress())
-
-    // Sized exactly as InlineColorPicker sizes itself: the default swatch list at the raw window width.
-    expect(mockGetContentSize).toHaveBeenLastCalledWith(defaultColors.length, 402)
-    expect(useColorPickerAlign).toHaveBeenLastCalledWith(false, 100 + defaultColors.length, 10 + 402, expect.anything())
-    expect(lastInlineColorPickerProps().alignOverride).toBe(placement)
-  })
-
-  // The popover opens inside the roster's scroll view, which clips it, so the hook is handed the
-  // column to keep it inside, without the host having to know the column's width.
-  it('hands the hook the roster column: the View the scroll view fills', () => {
-    const useColorPickerAlign = jest.fn((..._args: unknown[]) => placement)
-    renderManager({ useColorPickerAlign })
-    act(() => findTouchableRippleByText('New Profile').onPress())
-
-    const column = useColorPickerAlign.mock.lastCall![3]
-    const wrapper = (View as unknown as jest.Mock).mock.calls.map((call) => call[0] as { ref?: unknown; collapsable?: boolean; style?: unknown; children?: any }).find((props) => props.ref === column)
-    expect(wrapper).toMatchObject({ collapsable: false, style: { flex: 1 } })
-    expect(wrapper?.children?.type).toBe(FadingScrollView)
-  })
-
-  it('reports the popover as open to the hook once the color popover host opens, and closed again after', () => {
-    const useColorPickerAlign = jest.fn(() => placement)
-    renderManager({ useColorPickerAlign })
-    act(() => findTouchableRippleByText('New Profile').onPress())
-    const host = lastInlineColorPickerHost()
-
-    const lastOpenArg = () => (useColorPickerAlign.mock.calls as unknown[][])[useColorPickerAlign.mock.calls.length - 1][0]
-
-    act(() => host.toggle('color'))
-    expect(lastOpenArg()).toBe(true)
-
-    act(() => host.toggle('color'))
-    expect(lastOpenArg()).toBe(false)
-  })
-
-  it("applies to an existing profile's edit row too, and still passes every other InlineColorPicker prop through", () => {
-    const alice = createProfile({ id: 'a', name: 'Alice', color: '#654321', tag: 'AL' })
-    const colorPreview = jest.fn()
-    renderManager({ profiles: [alice], useColorPickerAlign: () => placement, colorPreview })
-    act(() => findTouchableRippleByText('Alice').onPress())
-
-    const props = lastInlineColorPickerProps()
-    expect(props).toMatchObject({ id: 'color', value: '#654321', tag: 'AL', previewValue: colorPreview })
-    expect(props.alignOverride).toBe(placement)
+    renderManager({ fg: '#123123' })
+    expect(title().style).toEqual(expect.arrayContaining([{ color: '#123123' }]))
   })
 })

@@ -45,8 +45,8 @@ export function clampTag(previous: string, next: string): string {
   const previousCodepoints = Array.from(previous)
   const nextCodepoints = Array.from(next)
 
-  // Shrinking (backspace/delete, or a selectTextOnFocus-driven wholesale replacement - see
-  // ProfilesManager's own EditRow - reporting its own replacement text as no longer than what it
+  // Shrinking (backspace/delete, or a selectTextOnFocus-driven wholesale replacement - see the Edit
+  // Profile screen's Tag field (EditProfile.tsx) - reporting its own replacement text as no longer than what it
   // overwrote) always passes through untouched: there's nothing to clamp about removing content.
   if (nextCodepoints.length <= previousCodepoints.length) return next
 

@@ -29,14 +29,14 @@ interface ProfileColorProviderProps {
   // where it is (ProfileSwatchPlace) and kept flat where it returns null. Hangman draws a pie of each
   // color's triad on the Color row and page only. The renderer is drawn behind the swatch's mark,
   // clipped to the circle.
-  // ProfilesManager hands it to hud's InlineColorPicker too (its trigger as a 'chip', its grid as the
+  // ProfilesManager's Edit Profile screen draws with it too (its chip as a 'chip', its color grid as a
   // 'colorPage'). Rows that fill with a color (a selected picker row) stay flat.
   renderSwatch?: ProfileSwatchRenderer
   children: ReactNode
 }
 
 // App-wide display transform for profile colors. Every ProfileChip, ProfilePicker's selected-row
-// fill and ProfilesManager's color picker previews read it, and so does anything outside this
+// fill and ProfilesManager's Edit Profile screen (its chip and color grid) read it, and so does anything outside this
 // package that draws a ProfileChip (@tastic/hud's AchievementUnlockList). Without a provider (or
 // with neither prop), profile colors draw as saved, in flat swatches.
 export function ProfileColorProvider({ preview, renderSwatch, children }: ProfileColorProviderProps) {

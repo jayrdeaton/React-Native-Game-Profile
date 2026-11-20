@@ -1,8 +1,8 @@
 # @tastic/profile
 
 Player profile identity for local-multiplayer React Native games - a saved name/color/tag a player
-selects per seat, with a selection popover, an inline-editable roster screen, and a reusable identity
-badge. Deliberately blind to anything app-specific: a control scheme, a stats bucket, or anything
+selects per seat, with a selection popover, a roster screen and an edit screen for each profile, and a
+reusable identity badge. Deliberately blind to anything app-specific: a control scheme, a stats bucket, or anything
 else keyed by profile id lives entirely on the host app's own side.
 
 ## Why a separate `Profile` type at all?
@@ -37,7 +37,7 @@ see its own doc comment for why that component is generic over your own `Profile
   RN-touching barrels). `isValidTag` accepts an empty tag, up to `MAX_TAG_LENGTH` (3) plain
   characters (counted in code points), or exactly one emoji (including a ZWJ-joined compound), and
   rejects mixing the two. `isValidProfile` wants a non-empty `id`, a `name` that isn't blank and is
-  at most `MAX_PROFILE_NAME_LENGTH` (20) characters (the cap `ProfilesManager`'s name field
+  at most `MAX_PROFILE_NAME_LENGTH` (20) characters (the cap `EditProfileScreen`'s name field
   enforces), a `#RRGGBB` `color`, a valid `tag` and numeric timestamps. It checks only this
   package's own base fields - a host app composes its own richer validator on top the same way it
   extends the type:
@@ -52,7 +52,7 @@ see its own doc comment for why that component is generic over your own `Profile
   already fills its own background.
 - **`ProfilePicker`**: a name trigger + selection popover: pick an existing profile, fall back to a
   null/"guest" selection, or (if `onManage` is passed) navigate to a management screen. Selection
-  only - creating, renaming, and deleting all live in `ProfilesManager`. Generic over your own
+  only - creating, renaming, and deleting all live in `EditProfileScreen`. Generic over your own
   `Profile` type (see above). It takes `idPrefix` (namespaces its popover id: give each picker
   sharing a host its own), `host` (a `@tastic/hud` popover host, shared by sibling pickers so
   opening one closes the others), `profiles`, `selectedId` (`null` for the guest row), `color` (the
@@ -94,29 +94,44 @@ see its own doc comment for why that component is generic over your own `Profile
   option closes the popover; the Color row behaves as in `ProfilePicker`.
   `getOptionPickerContentSize(options, colorSection?)` is its popover's `{ width, height }`: pass
   the options themselves to count their dividers, or a bare count for rows only.
-- **`ProfilesManager`**: the roster screen itself: create/rename/recolor/retag/delete, editing
-  inline in the row you tap, with a destructive-delete confirmation. No navigation of its own (no
-  router, no back button) - a host app renders this as a routed screen's body and supplies its own
-  persistence via `profiles`/`onCreate`/`onSave`/`onDelete`. `onCreate`/`onSave` both take a
-  `ProfileEditPatch` (`{ name, color, tag }`) - exported from this package's own public API (it was
-  a private, unexported interface inside `ProfilesManager.tsx` until `ProfilesScreen` below needed
-  to reference it from its own props). `defaultColor` (required) is the color a new profile's draft
-  starts on, and `onDelete` fires only after the confirmation, so clear anything else you key by
-  profile id there. Optional `ProfilesManagerProps`: `headerLeft` (a node rendered before the
-  "Profiles" title, e.g. a back button), `fg`/`fgMuted` (text colors, black/white by appearance
-  when omitted), `titleVariant` (a Paper text variant, default `'headlineSmall'`), `colorPreview`
-  (defaults to `ProfileColorProvider`'s `preview`), `useColorPickerAlign` (see below) and `ref`, a
-  `ProfilesManagerHandle` whose `commitPendingEdit()` saves the row being edited. The component
-  does that on unmount anyway, but a router that keeps a popped screen mounted (React Navigation's
-  web renderer) never unmounts it, so call it right before navigating away. It's a no-op when
-  nothing is being edited.
+- **`ProfilesManager`**: the roster: a chip and name per profile, alphabetically, with New Profile
+  last. Tapping a row calls `onEdit(profileId)` with its id, and New Profile calls it with
+  `NEW_PROFILE_ID` (`'new'`): wire it to a push of your edit route (see "Routed screens" below), the
+  same way hud's Settings takes `onShowProfiles`. Nothing is edited on the list. No navigation of its
+  own (no router, no back button) - a host app renders it as a routed screen's body. Optional
+  `ProfilesManagerProps`: `headerLeft` (a node rendered before the "Profiles" title, e.g. a back
+  button), `fg` (the text color, black/white by appearance when omitted) and `titleVariant` (a Paper
+  text variant, default `'headlineSmall'`).
+- **`EditProfileScreen`**: one profile's own screen, for your edit route to render with the route's
+  id: a back arrow and the title (Edit Profile, or New Profile) with Done on the right, the profile's
+  chip big at the top as it will look, then **Name** (with a hint: "Only friends you invite online see
+  your name."), **Tag** (a field you can see, with a hint: up to
+  3 letters or an emoji, drawn on the profile's color, and what strangers see wherever they can see
+  you, instead of the name) and **Color** (the swatch grid on the screen, drawn through
+  `ProfileColorProvider`'s `preview` and `renderSwatch`), and Delete Profile at the bottom of a saved
+  profile, behind `@tastic/hud`'s destructive `ConfirmDialog`. The tag follows the name's first letter
+  until it's typed into. Return goes from Name to Tag, and Tag's Return finishes. The back arrow,
+  Done and Tag's Return save and call `onBack`; a swipe back, Android's back button or the browser's
+  back leave through your router, and the screen saves as it unmounts. It saves only when something
+  changed (an empty name, or a saved profile left as it was, saves nothing) and only once, so a new
+  profile is never made twice. A color off `@rific/auto-paper`'s palette (a new profile's
+  `defaultColor`, or a profile's saved color) leads the grid, picked, so another can be tried and the
+  original picked again; the form is held to a 480pt column in a wide window. `EditProfileScreenProps`:
+  `profileId` (a profile's id, or `NEW_PROFILE_ID`; an id the roster doesn't have leaves at once
+  through `onBack`, saving nothing), `profiles` (render the screen once the roster has loaded),
+  `defaultColor` (a new profile's color, required), `onCreate(patch)` and `onSave(id, patch)` (a
+  `ProfileEditPatch`, `{ name, color, tag }`: compose any extra required fields of your own profile
+  shape in your own closure), `onDelete(id)` (fires only after the confirmation, then `onBack`: clear
+  anything else you key by profile id there) and `onBack` (leave the screen), plus optional
+  `fg`/`fgMuted` (text colors), `bg` (black/white by appearance by default, as `ProfilesScreen`'s;
+  `'transparent'` over your own backdrop), `titleVariant`, `colorPreview` (what the screen draws for a
+  color; defaults to `ProfileColorProvider`'s `preview`) and `ref`, an `EditProfileScreenHandle` whose
+  `commitPendingEdit()` saves the draft now: for a router that keeps a screen it has left mounted,
+  call it as the screen loses focus. Expo Router unmounts it (checked on the web).
 - **`ProfilesScreen`**: the routed-screen shell around `ProfilesManager`: the container `View`,
-  theme-derived background/foreground, a back button, and the commit-pending-edit-before-navigate
-  composition every app in the fleet used to hand-roll on its own around `ProfilesManager` (see
-  "Routed screens: `ProfilesScreen`" below). Same `ProfileEditPatch`-shaped
-  `profiles`/`defaultColor`/`onCreate`/`onSave`/`onDelete` as `ProfilesManager` itself, plus
-  `onBack` (`ProfilesScreenProps`). Owns its own `ProfilesManagerHandle` ref internally - there's no
-  `ref` prop here, since nothing outside it needs one anymore.
+  theme-derived background/foreground and a back button (see "Routed screens" below). Takes
+  `profiles`, `onEdit` and `onBack`, plus optional `fg`, `bg` and `titleVariant`
+  (`ProfilesScreenProps`).
 - **`readSharedProfiles` / `saveSharedProfiles` / `subscribeSharedProfiles` / `isSharedProfileStoreAvailable`**: an *optional*
   cross-app roster, shared between multiple apps of yours via a native iOS App Group (same Apple
   Developer Team, same `"com.apple.security.application-groups"` entitlement value on every
@@ -206,72 +221,53 @@ caption, 36 without) and its 9pt divider, or the color page (a 36pt back row and
 for 20 colors), plus the padding.
 
 
-#### The Profiles screen's color swatch: `useColorPickerAlign`
+### Routed screens: `ProfilesScreen` and `EditProfileScreen`
 
-`ProfilesManager` (and `ProfilesScreen`, which forwards it) renders `@tastic/hud`'s `InlineColorPicker`
-for the swatch popover in an edit row, and owns the popover state internally - so the host cannot pass
-`alignOverride` to it directly. Inside a fake-rotated frame that popover has the same misplacement.
-Pass a placement **hook** as `useColorPickerAlign`:
-
-```tsx
-<ProfilesScreen useColorPickerAlign={useFrameAutoAlign} /* ...the usual props */ />
-```
-
-It is called as `useColorPickerAlign(open, contentWidth, contentHeight, column)` - `open` is whether the swatch
-popover is showing, the size is what `InlineColorPicker` itself computes (`@tastic/hud`'s
-`getInlineColorPickerContentSize` for the default swatch list at the raw window width), and `column` is a ref
-to the roster's scroll view, which clips the popover at its edges: measure it to keep the popover inside a
-roster narrower than the frame (a column capped in a wide window) - and must return a
-`ProfilePickerAlignResult`, which is handed to `InlineColorPicker` as its `alignOverride` (its `triggerRef`
-is the ref that gets measured). It is a hook, not a plain function: give it a stable identity for the life of
-the mount (a module-level function), since switching it at runtime remounts the swatch. Omit it and behaviour is
-identical to before, and without a hook the popover is kept inside that column for you (`InlineColorPicker`'s
-`bounds`, `@tastic/hud` 0.25.0+).
-
-### Routed screens: `ProfilesScreen`
-
-`ProfilesScreen` is the routed-screen shell every app in the fleet was hand-rolling on its own
-around `ProfilesManager`: a container `View`, theme-derived bg/fg, a `headerLeft` back button, and
-the two-line `managerRef.current?.commitPendingEdit(); onBack()` composition every app's own
-back-button handler used to write out by hand (see `ProfilesManager`'s own `commitPendingEdit` doc
-above for why that flush matters on a router that doesn't genuinely unmount a popped screen). It
-owns that ref itself - there's no `ref` prop on `ProfilesScreen`, since nothing outside it needs
-one any more.
-
-Same `profiles`/`defaultColor`/`onCreate`/`onSave`/`onDelete` props as `ProfilesManager` - still
-`ProfileEditPatch`-shaped, still deliberately not widened to your own richer `CreateProfileInput`;
-compose any extra required fields (a key/control scheme, whatever's specific to your game) in your
-own closure at the call site, exactly as you already would calling `ProfilesManager` directly -
-plus `onBack`. `fg`/`fgMuted`/`bg`/`titleVariant`/`colorPreview` are all independently
-optional and forward straight through to the internal `ProfilesManager` (`bg` is new here -
-`ProfilesManager` itself has no `bg`, since it doesn't own a container `View` of its own).
-
-A whole routed screen, wired to your own store, is usually this small:
+Profiles is two routes: the roster, and one profile's Edit Profile screen pushed from it with the
+profile's id (or `NEW_PROFILE_ID`). Each is a whole screen, so the edit screen gets its own address,
+transition and back gestures. `ProfilesScreen` is the roster's shell (container `View`, theme-derived
+bg/fg, a back arrow); `EditProfileScreen` is the edit route's whole screen. Neither calls a host's own
+hooks: data in, callbacks out.
 
 ```tsx
 // app/profiles.tsx
-import { defaultColors } from '@rific/auto-paper'
 import { ProfilesScreen } from '@tastic/profile'
 import { router } from 'expo-router'
+
+import { useProfiles } from '@/hooks/useProfiles'
+
+export default function Profiles() {
+  const { profiles } = useProfiles()
+  return <ProfilesScreen profiles={profiles} onEdit={(id) => router.push({ pathname: '/profile/[id]', params: { id } })} onBack={() => router.back()} />
+}
+```
+
+```tsx
+// app/profile/[id].tsx
+import { defaultColors } from '@rific/auto-paper'
+import { EditProfileScreen } from '@tastic/profile'
+import { router, useLocalSearchParams } from 'expo-router'
 
 import { useGameStats } from '@/hooks/useGameStats'
 import { useProfiles } from '@/hooks/useProfiles'
 
-export default function Profiles() {
+export default function EditProfile() {
+  const { id } = useLocalSearchParams<{ id: string }>()
   const { profiles, createProfile, updateProfile, deleteProfile } = useProfiles()
   // Only for wiring onDelete below - clears a deleted profile's own stats record so it doesn't
   // stick around as an orphan once the profile itself is gone.
   const { removeProfileStats } = useGameStats()
 
   return (
-    <ProfilesScreen
+    <EditProfileScreen
+      profileId={id}
       profiles={profiles}
       defaultColor={defaultColors[0].value}
       onCreate={(patch) => createProfile(patch)}
-      onSave={(id, patch) => updateProfile(id, patch)}
-      onDelete={(id) => {
-        deleteProfile(id)
-        removeProfileStats(id)
+      onSave={(profileId, patch) => updateProfile(profileId, patch)}
+      onDelete={(profileId) => {
+        deleteProfile(profileId)
+        removeProfileStats(profileId)
       }}
       onBack={() => router.back()}
     />
@@ -282,9 +278,9 @@ export default function Profiles() {
 `useProfiles`/`useGameStats` are your own app's hooks, not exports of this package - `profiles` is
 whatever `Profile[]` (or your own extended shape) you already keep in Redux/context/state, and
 `createProfile`/`updateProfile`/`deleteProfile` are however you already persist it. `onBack` can be
-anything with no arguments - `router.back()`, a `safeBack()`-style helper that no-ops with no back
-stack behind it, `navigation.goBack()` - `ProfilesScreen` only ever calls it after flushing any
-in-progress inline edit first.
+anything with no arguments - `router.back()`, a `safeBack()`-style helper that falls back to the
+roster when the edit page was opened directly, `navigation.goBack()`. `@tastic/shell` has both routes
+as `ProfilesRoute` and `EditProfileRoute`.
 
 ### Redux helpers for the shared roster
 
@@ -362,8 +358,8 @@ const preview = useCallback((hex: string) => blendTowardCardBack(hex, dark), [da
 ```
 
 Every `ProfileChip` then draws `preview(profile.color)` (contrast computed against that),
-`ProfilePicker`'s selected row fills with it, and `ProfilesManager`/`ProfilesScreen` use it for
-their swatch previews unless an explicit `colorPreview` prop is passed. Components from other
+`ProfilePicker`'s selected row fills with it, and `EditProfileScreen` uses it for its chip and
+swatches unless an explicit `colorPreview` prop is passed. Components from other
 packages that render a `ProfileChip` (e.g. `@tastic/hud`'s `AchievementUnlockList`) pick it up
 for free. Only what's drawn changes: saved colors, `onCreate`/`onSave` values and selection are
 untouched. `useProfileColorPreview()` returns the provider's function (or `undefined`), and
@@ -388,9 +384,9 @@ const renderSwatch: ProfileSwatchRenderer = (color, size, place) => (place === '
 ```
 
 (`TriadPie` is your own component, e.g. three `react-native-svg` arcs.) Give it a stable identity
-(module level, or `useCallback`). `ProfilesManager`'s edit row hands it to `@tastic/hud`'s
-`InlineColorPicker` too: its trigger (the profile's color with its tag on it) as a `'chip'`, its grid
-as the `'colorPage'`. Rows that fill with a color (a selected picker row) stay flat.
+(module level, or `useCallback`). `EditProfileScreen` draws with it too: its
+chip (the profile's color with its tag on it) as a `'chip'`, its color grid as the `'colorPage'`.
+Rows that fill with a color (a selected picker row) stay flat.
 `useProfileSwatchRenderer()` returns it (or `undefined`).
 
 ## Per-seat color persistence
@@ -482,20 +478,17 @@ None of these are bundled:
   `react-native-safe-area-context` >=4.0.0
 - `@rific/auto-paper` >=0.13.0 (`defaultColors`, `FadingScrollView`, `getContrastColor`,
   `useAutoPaperTheme`)
-- `@rific/feedback-press` >=0.10.0 (`IconButton`, `TouchableRipple`)
+- `@rific/feedback-press` >=0.10.0 (`Button`, `IconButton`, `TouchableRipple`)
 - `@rific/focus-chain` >=0.4.0 (`useFocusChain`)
 - `@rific/toaster` >=0.4.0 (`useToast`)
-- `@tastic/hud` >=0.25.1 (`ConfirmDialog`, `getInlineColorPickerContentSize`, `InlineColorPicker`,
-  `PopoverBody`, `useAutoAlign`, `usePopoverHost`)
+- `@tastic/hud` >=0.35.0 (`ConfirmDialog`, `PopoverBody`, `useAutoAlign`, `useLettering`)
 - `@tastic/core` >=0.1.0 (a peer of `@tastic/hud` itself; never imported here)
 - `expo-modules-core` >=1.0.0, *optional*
 
 This package imports `@tastic/hud` only through its light `@tastic/hud/chrome` entry, never the main
 one (which also loads Skia and `@tastic/split-screen`), so an app with neither, like Hangman, can use
-every component here. hud 0.23.0 was the first whose `./chrome` has the popover pieces and the color
-picker; the floor is 0.25.1 because `InlineColorPicker`'s `bounds` and `renderSwatch` (and the
-`ViewInstance` type) arrived in 0.25.0, and 0.25.1 fixed the return type its declarations gave
-`useAutoAlign`.
+every component here. The floor is 0.35.0 for `useLettering` (a game's own lettering on the
+pickers' pills, see "A game's own lettering on the pills" above).
 
 `expo-modules-core` is only for the native App Group bridge described above, which the shared
 roster functions use on iOS. It's loaded inside a `try`, so it's safe to omit entirely on an
