@@ -461,6 +461,78 @@ const p2Display = avoidSeatColorClash(p1Color, p2Color, [DEFAULT_P1_COLOR, DEFAU
 On a clash, seat 2 shows seat 1's default color, or seat 2's default when seat 1 is already on its
 own. It's for display only: don't persist it, so a guest's or the CPU's remembered color stays put.
 
+## Online players (`@tastic/profile/online`)
+
+A profile is the person, offline and online: each profile that plays online gets its own anonymous
+player on Tastic-Server, the fleet's game server, one per game. The server never gets the profile's
+id, an email or a device id, only the player's name (the one friends see), the device's push token
+if notifications are allowed, and what the game sends. An opt-in subpath, so a game with no online
+play never loads it; it imports none of Expo's modules itself, so the ones it uses are handed in.
+
+```tsx
+import * as Notifications from 'expo-notifications'
+import * as SecureStore from 'expo-secure-store'
+import { createOnlinePlayers, OnlineDataSection, useOnlinePlayers, useOnlinePlayersSync } from '@tastic/profile/online'
+
+// Once, at module scope
+export const online = createOnlinePlayers({
+  game: 'hexfleet', // the server's X-Game, and the namespace the players are kept under
+  serverUrl: 'https://play.infinitetoken.com',
+  rulesVersion: RULES_VERSION, // X-Rules-Version: an app on another version gets a 426
+  secureStore: Platform.OS === 'web' ? undefined : SecureStore, // the Keychain; a browser uses localStorage
+  notifications: Platform.OS === 'web' ? undefined : Notifications // leave out for a game with no pushes
+})
+
+// Where the roster lives (renames, deletes, pushes for every player)
+useOnlinePlayersSync(online, profiles, loaded)
+
+// A profile going online, then a call of the game's own as its player
+await online.ensure(profile)
+const matches = await online.call(profile.id, 'GET', '/matches')
+```
+
+- **`createOnlinePlayers(options)`** returns the players. `options`: `game`, `serverUrl`,
+  `rulesVersion`, and optional `secureStore` (expo-secure-store; values kept readable after the
+  first unlock, so a push can be answered from the lock screen), `notifications` (expo-notifications),
+  `channelName` (Android's channel name for the pushes, default "Your move"), `nameOf` (the name the
+  server gets for a profile, its own by default) and `storage` (any `OnlineStorage`, in place of the
+  default: the Keychain with `secureStore`, the site's localStorage in a browser, memory otherwise).
+  Each player is kept under a key of its own (`<game>.online.player.<profileId>`), with an index at
+  `<game>.online.players`.
+- **`ensure(profile)`** gives the profile's player, made the first time it goes online and renamed
+  when the profile's name changed. A kept player is checked with the server once a launch before it's
+  used, so a player the server lost is made again then. Concurrent calls make one player.
+- **`call(profileId, method, path, body?)`** is a call to the server as that profile's player, with the
+  game's headers. A 401 forgets the player here, so the next `ensure` makes a new one. **`request`**
+  is the same with no player (or any `token`). Errors are `OnlineError`s with the HTTP `status` (0
+  when the server can't be reached).
+- **`sync(profiles)`** follows the roster: renames players whose profile has a new name and deletes
+  from the server the players whose profile is gone, a profile deleted in a sibling game sharing the
+  roster included. A deletion the server can't take now is kept and tried again by the next `sync`,
+  even after a relaunch. Only call it with the roster loaded: a profile missing from it loses its
+  player. **`useOnlinePlayersSync(online, profiles, loaded)`** runs it, then `registerPushes(false)`,
+  once the roster has loaded and whenever it changes.
+- **`registerPushes(ask)`** registers the device's push token for every player on it at once
+  (Tastic-Server's `PUT /push-token`), asking for permission only when `ask` (a profile's first match;
+  never at launch). A new player is added to the pushes as it's made, if they were allowed before. A
+  key the server lost is found and dropped, and the rest registered. Nothing in a browser.
+- **`profileOfPush(data)`** is the profile a push is for, from the player id the server puts in each
+  push's data.
+- **`remove(profileId)`** and **`removeAll()`** delete players from the server (a 401 or 404 means
+  they already were) and forget them here; a server that can't be reached throws and keeps them.
+- **`players()`**, **`playerOf(profileId)`**, **`subscribe(listener)`** and **`useOnlinePlayers(online)`**
+  read the players kept on the device.
+- **`OnlineDataSection`** is Settings' ONLINE section (@tastic/hud's Settings look): Delete Online
+  Data for every profile on the device, behind hud's destructive `ConfirmDialog`, shown once a profile
+  has played online. Props: `online`, `confirmMessage` (what deleting does in this game), `onDeleted`
+  and `onError(message)` (pass a toast; a Settings dialog draws through a Portal above the toast
+  provider). A single profile's online player goes with the profile when it's deleted. Apple requires
+  an account made in an app to be deletable in it (guideline 5.1.1(v)), and the anonymous player is one.
+
+Each game keeps its own server calls (HexFleet's matches and lobby, CardTastic's daily runs). One
+device must never put two of its profiles in the same match, since it would hold both sides' plans:
+that's for the game to check.
+
 ## Install
 
 ```bash
@@ -484,6 +556,9 @@ None of these are bundled:
 - `@tastic/hud` >=0.35.0 (`ConfirmDialog`, `PopoverBody`, `useAutoAlign`, `useLettering`)
 - `@tastic/core` >=0.1.0 (a peer of `@tastic/hud` itself; never imported here)
 - `expo-modules-core` >=1.0.0, *optional*
+
+`@tastic/profile/online` takes `expo-secure-store` and `expo-notifications` as arguments rather than
+importing them, so neither is a peer dependency: a game installs the ones it hands in.
 
 This package imports `@tastic/hud` only through its light `@tastic/hud/chrome` entry, never the main
 one (which also loads Skia and `@tastic/split-screen`), so an app with neither, like Hangman, can use

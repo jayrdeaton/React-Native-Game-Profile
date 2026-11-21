@@ -30,7 +30,15 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
-    }
+    },
+    "./online": {
+      "react-native": "./src/online/index.ts",
+      "browser": "./src/online/index.ts",
+      "types": "./dist/online/index.d.ts",
+      "import": "./dist/online/index.mjs",
+      "require": "./dist/online/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "main": "dist/index.js",
   "module": "dist/index.mjs",
