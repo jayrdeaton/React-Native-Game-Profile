@@ -125,9 +125,17 @@ see its own doc comment for why that component is generic over your own `Profile
   anything else you key by profile id there) and `onBack` (leave the screen), plus optional
   `fg`/`fgMuted` (text colors), `bg` (black/white by appearance by default, as `ProfilesScreen`'s;
   `'transparent'` over your own backdrop), `titleVariant`, `colorPreview` (what the screen draws for a
-  color; defaults to `ProfileColorProvider`'s `preview`) and `ref`, an `EditProfileScreenHandle` whose
+  color; defaults to `ProfileColorProvider`'s `preview`), `sections` (a game's own sections for a
+  saved profile, `(profile) => ReactNode`, drawn under Color and above Delete Profile:
+  `@tastic/profile/online`'s `ProfileOnlineSection`, say) and `ref`, an `EditProfileScreenHandle` whose
   `commitPendingEdit()` saves the draft now: for a router that keeps a screen it has left mounted,
   call it as the screen loses focus. Expo Router unmounts it (checked on the web).
+- **`EditProfileSection`**, **`EditProfileRow`** and **`useEditProfileColors()`**: for a game's own
+  `sections` on Edit Profile, drawn in the screen's colors (its `fg`/`fgMuted`, black/white by
+  appearance outside the screen) since they sit on the host's backdrop, not a card. `EditProfileSection`
+  is a labeled section as Name, Tag and Color are (`label`, `children`); `EditProfileRow` a row in the
+  Settings sheet's shape (`icon`, `label`, `caption`, `onPress`, `disabled`, `tone` `'on'`, `'off'` or
+  `'danger'` for its badge, `testID`).
 - **`ProfilesScreen`**: the routed-screen shell around `ProfilesManager`: the container `View`,
   theme-derived background/foreground and a back button (see "Routed screens" below). Takes
   `profiles`, `onEdit` and `onBack`, plus optional `fg`, `bg` and `titleVariant`
@@ -472,7 +480,7 @@ play never loads it; it imports none of Expo's modules itself, so the ones it us
 ```tsx
 import * as Notifications from 'expo-notifications'
 import * as SecureStore from 'expo-secure-store'
-import { createOnlinePlayers, OnlineDataSection, useOnlinePlayers, useOnlinePlayersSync } from '@tastic/profile/online'
+import { createOnlinePlayers, ProfileOnlineSection, useOnlinePlayers, useOnlinePlayersSync } from '@tastic/profile/online'
 
 // Once, at module scope
 export const online = createOnlinePlayers({
@@ -489,6 +497,9 @@ useOnlinePlayersSync(online, profiles, loaded)
 // A profile going online, then a call of the game's own as its player
 await online.ensure(profile)
 const matches = await online.call(profile.id, 'GET', '/matches')
+
+// On the profile's own Edit Profile screen
+<EditProfileScreen {...props} sections={(profile) => <ProfileOnlineSection online={online} profile={profile} />} />
 ```
 
 - **`createOnlinePlayers(options)`** returns the players. `options`: `game`, `serverUrl`,
@@ -525,12 +536,15 @@ const matches = await online.call(profile.id, 'GET', '/matches')
   `token`, the `name` the server has, and `profileName`, the profile's own name from the roster last
   handed to `ensure` or `sync` (the server's name until either has run since launch). Show
   `profileName`: a game with its own `nameOf` sends the server another name.
-- **`OnlineDataSection`** is Settings' ONLINE section (@tastic/hud's Settings look): Delete Online
-  Data for every profile on the device, behind hud's destructive `ConfirmDialog`, shown once a profile
-  has played online, naming them by their profiles ("Online as Dad and Kid"). Props: `online`, `confirmMessage` (what deleting does in this game), `onDeleted`
-  and `onError(message)` (pass a toast; a Settings dialog draws through a Portal above the toast
-  provider). A single profile's online player goes with the profile when it's deleted. Apple requires
-  an account made in an app to be deletable in it (guideline 5.1.1(v)), and the anonymous player is one.
+- **`ProfileOnlineSection`** is a profile's ONLINE section on its Edit Profile screen
+  (`EditProfileScreen`'s `sections`), shown once that profile has played online: a game's own rows
+  (`children`, `EditProfileRow`s: CardTastic's Show on Public Boards), then Delete Online Data, which
+  deletes that profile's player from the server, behind hud's destructive `ConfirmDialog`, and keeps
+  the profile. Props: `online`, `profile`, `confirmMessage` (what deleting does in this game; a plain
+  default names the profile and says it stays), `onDeleted`, `onError(message)` and `children`.
+  Deleting the profile deletes its player too (`sync`). Apple requires an account made in an app to
+  be deletable in it (guideline 5.1.1(v)), and the anonymous player is one. It replaced Settings'
+  device-wide `OnlineDataSection` (0.25.0): what's online about a person is on their own page.
 
 Each game keeps its own server calls (HexFleet's matches and lobby, CardTastic's daily runs). One
 device must never put two of its profiles in the same match, since it would hold both sides' plans:

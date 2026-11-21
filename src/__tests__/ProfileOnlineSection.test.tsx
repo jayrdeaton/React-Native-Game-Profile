@@ -4,8 +4,8 @@ import { ConfirmDialog } from '@tastic/hud/chrome'
 import { act, render } from '@testing-library/react'
 import { Platform } from 'react-native'
 
-import { OnlineDataSection } from '../online/OnlineDataSection'
 import { createOnlinePlayers, OnlineError, type OnlinePlayers } from '../online/onlinePlayers'
+import { ProfileOnlineSection } from '../online/ProfileOnlineSection'
 import { defaultStorage, localStorageStorage, memoryStorage, secureStoreStorage } from '../online/storage'
 import { useOnlinePlayersSync } from '../online/useOnlinePlayers'
 
@@ -16,9 +16,8 @@ jest.mock('@tastic/hud/chrome', () => ({ ConfirmDialog: jest.fn(() => null) }))
 const colors = { onSurface: '#fff', onSurfaceVariant: '#aaa', error: '#f00', errorContainer: '#400' }
 
 // Players held in memory, standing in for createOnlinePlayers' (tested in onlinePlayers.test.ts)
-function fakeOnline(names: string[]): OnlinePlayers & { removeAll: jest.Mock } {
-  // The server's names are a game's own (CardTastic's): the section names each player's profile
-  let players = names.map((name, i) => ({ profileId: `profile-${i}`, id: `p${i}`, token: `key-${i}`, name: 'CardTastic', profileName: name }))
+function fakeOnline(names: string[], from = 0): OnlinePlayers & { remove: jest.Mock; removeAll: jest.Mock } {
+  let players = names.map((name, i) => ({ profileId: `profile-${i + from}`, id: `p${i}`, token: `key-${i}`, name: 'CardTastic', profileName: name }))
   const listeners = new Set<() => void>()
   return {
     load: jest.fn(async () => {}),
@@ -29,7 +28,10 @@ function fakeOnline(names: string[]): OnlinePlayers & { removeAll: jest.Mock } {
     request: jest.fn(),
     sync: jest.fn(async () => {}),
     registerPushes: jest.fn(async () => {}),
-    remove: jest.fn(),
+    remove: jest.fn(async (profileId: string) => {
+      players = players.filter((p) => p.profileId !== profileId)
+      for (const listener of listeners) listener()
+    }),
     removeAll: jest.fn(async () => {
       players = []
       for (const listener of listeners) listener()
@@ -44,37 +46,55 @@ function fakeOnline(names: string[]): OnlinePlayers & { removeAll: jest.Mock } {
 
 const lastProps = <T,>(mock: unknown) => (mock as jest.Mock).mock.calls.at(-1)?.[0] as T
 
-describe('OnlineDataSection', () => {
+describe('ProfileOnlineSection', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    ;(useAutoPaperTheme as jest.Mock).mockReturnValue({ colors })
+    ;(useAutoPaperTheme as jest.Mock).mockReturnValue({ colors, dark: true })
   })
 
-  it('shows nothing until a profile on the device has played online', () => {
-    const { container } = render(<OnlineDataSection online={fakeOnline([])} />)
+  const KID = { id: 'profile-0', name: 'Kid' }
+  const SAM = { id: 'profile-1', name: 'Sam' }
+  const deleteRow = () => (TouchableRipple as unknown as jest.Mock).mock.calls.map((call) => call[0]).findLast((props: { testID?: string }) => props.testID === 'profile-online-delete') as { onPress: () => void; accessibilityLabel: string }
+
+  it('shows nothing until this profile has played online', () => {
+    const { container } = render(<ProfileOnlineSection online={fakeOnline(['Sam'], 1)} profile={KID} />)
     expect(container.textContent).toBe('')
-    expect(TouchableRipple).not.toHaveBeenCalled()
   })
 
-  it('names every profile that plays online, and deletes them all once confirmed', async () => {
-    const online = fakeOnline(['Kid', 'Sam', 'Jay'])
+  it("draws a game's own rows above Delete Online Data", () => {
+    const { container } = render(
+      <ProfileOnlineSection online={fakeOnline(['Kid'])} profile={KID}>
+        <span>Show on Public Boards</span>
+      </ProfileOnlineSection>
+    )
+    expect(container.textContent).toMatch(/^ONLINEShow on Public BoardsDelete Online Data/)
+  })
+
+  it("deletes only this profile's player once confirmed, saying the profile stays", async () => {
+    const online = fakeOnline(['Kid', 'Sam'])
     const onDeleted = jest.fn()
-    render(<OnlineDataSection online={online} onDeleted={onDeleted} confirmMessage='Open matches count as forfeits.' />)
-    expect(lastProps<{ accessibilityLabel: string }>(TouchableRipple).accessibilityLabel).toBe('Delete Online Data. Online as Kid, Sam and Jay')
-    act(() => lastProps<{ onPress: () => void }>(TouchableRipple).onPress())
-    const dialog = lastProps<{ visible: boolean; message: string; destructive: boolean; onConfirm: () => void }>(ConfirmDialog)
-    expect(dialog).toMatchObject({ visible: true, message: 'Open matches count as forfeits.', destructive: true })
+    render(<ProfileOnlineSection online={online} profile={SAM} onDeleted={onDeleted} />)
+    act(() => deleteRow().onPress())
+    const dialog = lastProps<{ visible: boolean; title: string; message: string; destructive: boolean; onConfirm: () => void }>(ConfirmDialog)
+    expect(dialog).toMatchObject({ visible: true, title: 'Delete Online Data?', destructive: true })
+    expect(dialog.message).toBe("Sam's online player is deleted from the server. The profile stays on this device. This can't be undone.")
     await act(async () => dialog.onConfirm())
-    expect(online.removeAll).toHaveBeenCalled()
+    expect(online.remove).toHaveBeenCalledWith(SAM.id)
     expect(onDeleted).toHaveBeenCalled()
+  })
+
+  it("takes the game's own confirm message", () => {
+    render(<ProfileOnlineSection online={fakeOnline(['Kid'])} profile={KID} confirmMessage='Open matches count as forfeits.' />)
+    act(() => deleteRow().onPress())
+    expect(lastProps<{ message: string }>(ConfirmDialog).message).toBe('Open matches count as forfeits.')
   })
 
   it('says why when the server could not be reached', async () => {
     const online = fakeOnline(['Kid'])
-    online.removeAll.mockRejectedValueOnce(new OnlineError(0, "Can't reach the server"))
+    online.remove.mockRejectedValueOnce(new OnlineError(0, "Can't reach the server"))
     const onError = jest.fn()
-    render(<OnlineDataSection online={online} onError={onError} />)
-    act(() => lastProps<{ onPress: () => void }>(TouchableRipple).onPress())
+    render(<ProfileOnlineSection online={online} profile={KID} onError={onError} />)
+    act(() => deleteRow().onPress())
     await act(async () => lastProps<{ onConfirm: () => void }>(ConfirmDialog).onConfirm())
     expect(onError).toHaveBeenCalledWith("Can't reach the server")
   })

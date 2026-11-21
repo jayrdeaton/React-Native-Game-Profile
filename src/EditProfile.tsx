@@ -1,11 +1,12 @@
 import { defaultColors, FadingScrollView, getContrastColor, useAutoPaperTheme } from '@rific/auto-paper'
 import { Button, IconButton, TouchableRipple } from '@rific/feedback-press'
 import { useFocusChain } from '@rific/focus-chain'
-import { useState } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
 import { KeyboardAvoidingView, type LayoutChangeEvent, Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Icon, Text, TextInput } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { EditProfileColorsContext } from './EditProfileSection'
 import { IdentityChip } from './IdentityChip'
 import { useProfileSwatchRenderer } from './ProfileColorContext'
 import { isValidTag, MAX_PROFILE_NAME_LENGTH } from './profilesValidation'
@@ -101,6 +102,8 @@ interface EditProfileProps {
   onDone: () => void
   // Omitted for a new profile: nothing saved yet to delete.
   onDelete?: () => void
+  // A game's own sections for a saved profile (EditProfileScreen's `sections`), under Color and above Delete Profile
+  extra?: ReactNode
   fg: string
   fgMuted: string
   titleVariant: 'displayLarge' | 'displayMedium' | 'displaySmall' | 'headlineLarge' | 'headlineMedium' | 'headlineSmall' | 'titleLarge' | 'titleMedium' | 'titleSmall' | 'labelLarge' | 'labelMedium' | 'labelSmall' | 'bodyLarge' | 'bodyMedium' | 'bodySmall'
@@ -114,10 +117,11 @@ interface EditProfileProps {
 // grid on the screen, not in a popover), and Delete Profile at the bottom for a saved profile.
 // Return goes Name to Tag, and Tag's Return finishes. Presentational: EditProfileScreen holds the
 // drafts and the saving. Not exported from index.ts.
-export function EditProfile({ isNew, draftName, onNameChange, draftTag, onTagChange, draftColor, onColorChange, startColor, onDone, onDelete, fg, fgMuted, titleVariant, colorPreview }: EditProfileProps) {
+export function EditProfile({ isNew, draftName, onNameChange, draftTag, onTagChange, draftColor, onColorChange, startColor, onDone, onDelete, extra, fg, fgMuted, titleVariant, colorPreview }: EditProfileProps) {
   const { colors } = useAutoPaperTheme()
   const insets = useSafeAreaInsets()
   const { width: windowWidth } = useWindowDimensions()
+  const textColors = useMemo(() => ({ fg, fgMuted }), [fg, fgMuted])
   const register = useFocusChain()
   const name = register()
   const tag = register()
@@ -173,6 +177,8 @@ export function EditProfile({ isNew, draftName, onNameChange, draftTag, onTagCha
               <SectionLabel color={fgMuted}>Color</SectionLabel>
               <ColorGrid swatches={editSwatches(startColor)} value={draftColor} onChange={onColorChange} preview={preview} ring={fg} estimatedWidth={estimatedWidth} />
             </View>
+
+            {extra && <EditProfileColorsContext.Provider value={textColors}>{extra}</EditProfileColorsContext.Provider>}
 
             {onDelete && (
               <Button mode='outlined' icon='trash-can-outline' onPress={onDelete} textColor={colors.danger} style={[styles.delete, { borderColor: colors.danger }]}>

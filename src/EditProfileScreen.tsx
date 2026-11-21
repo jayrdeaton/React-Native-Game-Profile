@@ -1,7 +1,7 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
 import { useToast } from '@rific/toaster'
 import { ConfirmDialog } from '@tastic/hud/chrome'
-import { Ref, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { type ReactNode, Ref, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 
 import { EditProfile } from './EditProfile'
@@ -62,6 +62,9 @@ export interface EditProfileScreenProps {
   // What the screen draws for a color, its chip and every swatch. Defaults to ProfileColorProvider's
   // preview. Saved colors are untouched.
   colorPreview?: (hex: string) => string
+  // A game's own sections for a saved profile, drawn under Color and above Delete Profile, in the screen's text colors
+  // (EditProfileSection, EditProfileRow, useEditProfileColors): @tastic/profile/online's ProfileOnlineSection, say. Not for a new profile
+  sections?: (profile: Profile) => ReactNode
   ref?: Ref<EditProfileScreenHandle>
 }
 
@@ -79,7 +82,7 @@ function deriveTag(name: string): string {
 // The back arrow, Done and the tag field's Return save and leave (onBack); a swipe back, Android's
 // back button or the browser's back leave through the router and save as the screen goes (Jay: they
 // all save). An empty name saves nothing. Deleting goes through hud's destructive ConfirmDialog.
-export function EditProfileScreen({ profileId, profiles, defaultColor, onCreate, onSave, onDelete, onBack, fg: fgOverride, fgMuted: fgMutedOverride, bg: bgOverride, titleVariant = 'headlineSmall', colorPreview: colorPreviewProp, ref }: EditProfileScreenProps) {
+export function EditProfileScreen({ profileId, profiles, defaultColor, onCreate, onSave, onDelete, onBack, fg: fgOverride, fgMuted: fgMutedOverride, bg: bgOverride, titleVariant = 'headlineSmall', colorPreview: colorPreviewProp, sections, ref }: EditProfileScreenProps) {
   const { dark } = useAutoPaperTheme()
   const { error: showErrorToast } = useToast()
   const contextColorPreview = useProfileColorPreview()
@@ -177,7 +180,7 @@ export function EditProfileScreen({ profileId, profiles, defaultColor, onCreate,
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
-      {!missing && <EditProfile isNew={isNew} draftName={draftName} onNameChange={handleNameChange} draftTag={draftTag} onTagChange={handleTagChange} draftColor={draftColor} onColorChange={setDraftColor} startColor={startColor} onDone={handleDone} onDelete={profile ? () => setConfirmingDelete(true) : undefined} fg={fg} fgMuted={fgMuted} titleVariant={titleVariant} colorPreview={colorPreview} />}
+      {!missing && <EditProfile isNew={isNew} draftName={draftName} onNameChange={handleNameChange} draftTag={draftTag} onTagChange={handleTagChange} draftColor={draftColor} onColorChange={setDraftColor} startColor={startColor} onDone={handleDone} onDelete={profile ? () => setConfirmingDelete(true) : undefined} extra={profile && sections ? sections(profile) : undefined} fg={fg} fgMuted={fgMuted} titleVariant={titleVariant} colorPreview={colorPreview} />}
 
       {/* hud's ConfirmDialog, the one confirm card every app in the fleet uses (Jay, 2026-10-15: one
         look for every dialog), destructive. */}

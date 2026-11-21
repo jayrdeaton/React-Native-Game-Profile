@@ -1,4 +1,5 @@
 export { EditProfileScreen, type EditProfileScreenHandle, type EditProfileScreenProps, NEW_PROFILE_ID, type ProfileEditPatch } from './EditProfileScreen'
+export { type EditProfileColors, EditProfileRow, type EditProfileRowProps, EditProfileSection, useEditProfileColors } from './EditProfileSection'
 export { getOptionPickerContentSize, OptionPicker, type OptionPickerOption } from './OptionPicker'
 export { ProfileChip } from './ProfileChip'
 export { ProfileColorProvider, type ProfileSwatchPlace, type ProfileSwatchRenderer, useProfileColorPreview, useProfileDisplayColor, useProfileSwatchRenderer } from './ProfileColorContext'
