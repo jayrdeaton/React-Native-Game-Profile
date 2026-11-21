@@ -14,8 +14,11 @@ export interface OnlinePlayer {
   // The server's id for the player, and the key every call made as them carries
   id: string
   token: string
-  // The name the server has for them
+  // The name the server has for them (`nameOf`)
   name: string
+  // The profile's own name, as the roster last handed it to `ensure` or `sync` (the server's name until either has run this launch).
+  // What a game shows for the player, Delete Online Data's "Online as" included, since a game can send the server another name
+  profileName: string
 }
 
 // What the players follow of a profile
@@ -120,13 +123,24 @@ export function createOnlinePlayers(options: OnlinePlayersOptions): OnlinePlayer
   // (a deleted player, a server started over) makes a new player then, not an error in the middle of a match
   const checked = new Set<string>()
   const making = new Map<string, Promise<OnlinePlayer>>()
+  // Each profile's own name, from the roster `ensure` and `sync` are handed. Only in memory: the roster is the game's to keep
+  const profileNames = new Map<string, string>()
   const listeners = new Set<() => void>()
   let snapshot: readonly OnlinePlayer[] = EMPTY
   let loading: Promise<void> | null = null
 
+  const toPlayer = (profileId: string, kept: Kept): OnlinePlayer => ({ profileId, ...kept, profileName: profileNames.get(profileId) ?? kept.name })
+
   const changed = () => {
-    snapshot = [...live].map(([profileId, kept]) => ({ profileId, ...kept }))
+    snapshot = [...live].map(([profileId, kept]) => toPlayer(profileId, kept))
     for (const listener of listeners) listener()
+  }
+
+  // Notes the profile's own name, saying whether it's news for a player on the device
+  const noteName = (profile: OnlineProfile) => {
+    const was = profileNames.get(profile.id)
+    profileNames.set(profile.id, profile.name)
+    return live.has(profile.id) && was !== profile.name
   }
 
   async function writeIndex() {
@@ -217,7 +231,7 @@ export function createOnlinePlayers(options: OnlinePlayersOptions): OnlinePlayer
         else if (!checked.has(profile.id)) await call(profile.id, 'GET', '/players/me')
         checked.add(profile.id)
         if (known.name !== name) await keep(profile.id, { ...known, name })
-        return { profileId: profile.id, ...known, name }
+        return toPlayer(profile.id, { ...known, name })
       } catch (err) {
         // The server no longer knows them (`call` forgot them): a new player below
         if (!(err instanceof OnlineError && err.status === 401)) throw err
@@ -229,11 +243,12 @@ export function createOnlinePlayers(options: OnlinePlayersOptions): OnlinePlayer
     await keep(profile.id, kept)
     // A new player joins the device's pushes, if they were ever allowed
     void registerPushes(false)
-    return { profileId: profile.id, ...kept }
+    return toPlayer(profile.id, kept)
   }
 
   async function ensure(profile: OnlineProfile): Promise<OnlinePlayer> {
     await load()
+    if (noteName(profile)) changed()
     const pending = making.get(profile.id)
     if (pending) return pending
     const run = make(profile).finally(() => making.delete(profile.id))
@@ -258,6 +273,8 @@ export function createOnlinePlayers(options: OnlinePlayersOptions): OnlinePlayer
     await load()
     const byId = new Map(profiles.map((profile) => [profile.id, profile]))
     let lost = false
+    let renamed = false
+    for (const profile of profiles) if (noteName(profile)) renamed = true
     for (const [profileId, kept] of [...live]) {
       const profile = byId.get(profileId)
       if (profile) {
@@ -275,10 +292,8 @@ export function createOnlinePlayers(options: OnlinePlayersOptions): OnlinePlayer
       gone.set(profileId, kept)
       lost = true
     }
-    if (lost) {
-      await writeIndex().catch(() => {})
-      changed()
-    }
+    if (lost) await writeIndex().catch(() => {})
+    if (lost || renamed) changed()
     await flushGone()
   }
 
@@ -330,7 +345,7 @@ export function createOnlinePlayers(options: OnlinePlayersOptions): OnlinePlayer
     players: () => snapshot,
     playerOf: (profileId) => {
       const kept = live.get(profileId)
-      return kept ? { profileId, ...kept } : null
+      return kept ? toPlayer(profileId, kept) : null
     },
     ensure,
     call,

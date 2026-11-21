@@ -521,10 +521,13 @@ const matches = await online.call(profile.id, 'GET', '/matches')
 - **`remove(profileId)`** and **`removeAll()`** delete players from the server (a 401 or 404 means
   they already were) and forget them here; a server that can't be reached throws and keeps them.
 - **`players()`**, **`playerOf(profileId)`**, **`subscribe(listener)`** and **`useOnlinePlayers(online)`**
-  read the players kept on the device.
+  read the players kept on the device. Each `OnlinePlayer` has its `profileId`, the server's `id`, its
+  `token`, the `name` the server has, and `profileName`, the profile's own name from the roster last
+  handed to `ensure` or `sync` (the server's name until either has run since launch). Show
+  `profileName`: a game with its own `nameOf` sends the server another name.
 - **`OnlineDataSection`** is Settings' ONLINE section (@tastic/hud's Settings look): Delete Online
   Data for every profile on the device, behind hud's destructive `ConfirmDialog`, shown once a profile
-  has played online. Props: `online`, `confirmMessage` (what deleting does in this game), `onDeleted`
+  has played online, naming them by their profiles ("Online as Dad and Kid"). Props: `online`, `confirmMessage` (what deleting does in this game), `onDeleted`
   and `onError(message)` (pass a toast; a Settings dialog draws through a Portal above the toast
   provider). A single profile's online player goes with the profile when it's deleted. Apple requires
   an account made in an app to be deletable in it (guideline 5.1.1(v)), and the anonymous player is one.

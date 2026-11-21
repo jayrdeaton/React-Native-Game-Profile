@@ -17,7 +17,8 @@ const colors = { onSurface: '#fff', onSurfaceVariant: '#aaa', error: '#f00', err
 
 // Players held in memory, standing in for createOnlinePlayers' (tested in onlinePlayers.test.ts)
 function fakeOnline(names: string[]): OnlinePlayers & { removeAll: jest.Mock } {
-  let players = names.map((name, i) => ({ profileId: `profile-${i}`, id: `p${i}`, token: `key-${i}`, name }))
+  // The server's names are a game's own (CardTastic's): the section names each player's profile
+  let players = names.map((name, i) => ({ profileId: `profile-${i}`, id: `p${i}`, token: `key-${i}`, name: 'CardTastic', profileName: name }))
   const listeners = new Set<() => void>()
   return {
     load: jest.fn(async () => {}),

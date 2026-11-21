@@ -69,7 +69,7 @@ describe('createOnlinePlayers', () => {
   it('makes a player the first time a profile goes online, once however often it is asked at once', async () => {
     const { server, online } = setup()
     const [a, b] = await Promise.all([online.ensure(KID), online.ensure(KID)])
-    expect(a).toEqual({ profileId: KID.id, id: 'p1', token: 'key-p1', name: 'Kid' })
+    expect(a).toEqual({ profileId: KID.id, id: 'p1', token: 'key-p1', name: 'Kid', profileName: 'Kid' })
     expect(b).toEqual(a)
     expect(server.calls.filter((c) => c.path === '/players')).toHaveLength(1)
     expect(server.calls[0].headers).toMatchObject({ 'X-Game': 'hexfleet', 'X-Rules-Version': '7' })
@@ -119,6 +119,24 @@ describe('createOnlinePlayers', () => {
     const { server, online } = setup({ nameOf: () => 'CardTastic' })
     await online.ensure(KID)
     expect(server.players.get('key-p1')?.name).toBe('CardTastic')
+  })
+
+  it('still names each player by its profile when the server gets another name, following a rename with no call', async () => {
+    const storage = memoryStorage()
+    const { server, online, fetch } = setup({ nameOf: () => 'CardTastic' }, storage)
+    expect(await online.ensure(KID)).toMatchObject({ name: 'CardTastic', profileName: 'Kid' })
+    const listener = jest.fn()
+    online.subscribe(listener)
+    const calls = server.calls.length
+    await online.sync([{ ...KID, name: 'Kiddo' }])
+    expect(online.players().map((p) => p.profileName)).toEqual(['Kiddo'])
+    expect(online.playerOf(KID.id)?.profileName).toBe('Kiddo')
+    expect(listener).toHaveBeenCalled()
+    expect(server.calls).toHaveLength(calls)
+    // The roster is the game's: after a relaunch the profile's name is known again once the roster is handed in
+    const again = createOnlinePlayers({ game: 'hexfleet', serverUrl: 'https://play.test', rulesVersion: '7', storage, fetch, nameOf: () => 'CardTastic' })
+    await again.sync([{ ...KID, name: 'Kiddo' }])
+    expect(again.players().map((p) => p.profileName)).toEqual(['Kiddo'])
   })
 
   it('makes a new player when the server no longer knows the kept one', async () => {

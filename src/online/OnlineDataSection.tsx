@@ -29,7 +29,7 @@ export function OnlineDataSection({ online, confirmMessage = DEFAULT_MESSAGE, on
   const [confirming, setConfirming] = useState(false)
 
   if (players.length === 0) return null
-  const names = players.map((player) => player.name)
+  const names = players.map((player) => player.profileName)
   const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 
   async function remove() {
