@@ -216,4 +216,87 @@ describe('OptionPicker', () => {
     // Unmeasured, so the dropdown stays hidden: only the trigger renders.
     expect(texts()).toEqual(['RATTLER'])
   })
+
+  // A stats screen's games, Solitaire and Two Player (Jay, 2026-11-20: a shorter list): a group is a row with a chevron opening a page of
+  // its own options behind a back row, as the Color row does.
+  describe('groups', () => {
+    type Game = 'all' | 'solo' | 'solo-all' | 'klondike' | 'spider' | 'duo' | 'duo-all' | 'war'
+    const GAMES: OptionPickerOption<Game>[] = [
+      { value: 'all', label: 'All Games', icon: 'view-grid-outline' },
+      {
+        value: 'solo',
+        label: 'Solitaire',
+        options: [
+          { value: 'solo-all', label: 'All', triggerLabel: 'Solitaire' },
+          { value: 'klondike', label: 'Klondike' },
+          { value: 'spider', label: 'Spider' }
+        ]
+      },
+      {
+        value: 'duo',
+        label: 'Two Player',
+        options: [
+          { value: 'duo-all', label: 'All', triggerLabel: 'Two Player' },
+          { value: 'war', label: 'War' }
+        ]
+      }
+    ]
+    const renderGames = (host: ReturnType<typeof makeHost>, value: Game, onChange = jest.fn()) => {
+      const view = render(<OptionPicker id={ID} host={host} options={GAMES} value={value} onChange={onChange} color='#123456' dark icon='view-grid-outline' />)
+      return { ...view, onChange }
+    }
+    // The last row drawn with this label: its element tree, walked through props.children
+    const holds = (node: unknown, label: string): boolean => {
+      if (typeof node === 'string') return node === label
+      if (Array.isArray(node)) return node.some((child) => holds(child, label))
+      return !!node && typeof node === 'object' && 'props' in node && holds((node as { props: { children?: unknown } }).props.children, label)
+    }
+    const ripple = (label: string) => mockTouchableRipple.mock.calls.map((call) => call[0]).findLast((props: { children?: unknown }) => holds(props.children, label)) as { onPress: () => void; style?: unknown[] }
+
+    it('names a pick in a group on the pill, by its own label or the one it asks for', () => {
+      renderGames(makeHost(null), 'spider')
+      expect(texts()).toEqual(['SPIDER'])
+      jest.clearAllMocks()
+      renderGames(makeHost(null), 'duo-all')
+      expect(texts()).toEqual(['TWO PLAYER'])
+    })
+
+    it('lists the groups as rows on the top list, the one holding the pick filled', () => {
+      renderGames(makeHost(ID), 'klondike')
+      expect(texts()).toEqual(['KLONDIKE', 'All Games', 'Solitaire', 'Two Player'])
+      expect(ripple('Solitaire').style).toContainEqual({ backgroundColor: '#123456' })
+      expect(ripple('Two Player').style).not.toContainEqual({ backgroundColor: '#123456' })
+    })
+
+    it("opens a group's page behind a back row, picks from it, and opens on the top list again", () => {
+      const host = makeHost(ID)
+      const { onChange, rerender } = renderGames(host, 'all')
+      act(() => ripple('Two Player').onPress())
+      expect(texts().slice(-3)).toEqual(['Two Player', 'All', 'War'])
+      act(() => ripple('War').onPress())
+      expect(onChange).toHaveBeenCalledWith('war')
+      expect(host.close).toHaveBeenCalled()
+      // Closed, then opened again: the top list
+      rerender(<OptionPicker id={ID} host={makeHost(null)} options={GAMES} value='war' onChange={onChange} color='#123456' dark icon='view-grid-outline' />)
+      jest.clearAllMocks()
+      rerender(<OptionPicker id={ID} host={makeHost(ID)} options={GAMES} value='war' onChange={onChange} color='#123456' dark icon='view-grid-outline' />)
+      expect(texts()).toEqual(['WAR', 'All Games', 'Solitaire', 'Two Player'])
+    })
+
+    it("goes back to the top list from a group's back row", () => {
+      renderGames(makeHost(ID), 'all')
+      act(() => ripple('Solitaire').onPress())
+      act(() => ripple('Solitaire').onPress())
+      expect(texts().slice(-3)).toEqual(['All Games', 'Solitaire', 'Two Player'])
+    })
+
+    it("is sized for the tallest page: the top list, or a group's back row and options", () => {
+      const tall: OptionPickerOption<string>[] = [
+        { value: 'a', label: 'A' },
+        { value: 'g', label: 'G', options: Array.from({ length: 6 }, (_, i) => ({ value: `g${i}`, label: `G${i}` })) }
+      ]
+      expect(getOptionPickerContentSize(tall)).toEqual(getOptionPickerContentSize(7))
+      expect(getOptionPickerContentSize(GAMES)).toEqual(getOptionPickerContentSize(4))
+    })
+  })
 })

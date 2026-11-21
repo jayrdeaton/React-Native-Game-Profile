@@ -152,11 +152,13 @@ interface PickerMenuProps {
   triggerStyle?: StyleProp<ViewStyle>
   // Pinned under the list page's rows, behind a divider (ProfilePicker's Manage row).
   footer?: ReactNode
+  // Which page of its own the list shows (an OptionPicker group's), so a new one starts scrolled to its top
+  pageKey?: string
   // The list page's rows.
   children: ReactNode
 }
 
-export function PickerMenu({ id, host, color, dark, label, caption, chip, colorSection, homeColor, contentSize, align: forcedAlign, alignOverride, triggerStyle, footer, children }: PickerMenuProps) {
+export function PickerMenu({ id, host, color, dark, label, caption, chip, colorSection, homeColor, contentSize, align: forcedAlign, alignOverride, triggerStyle, footer, pageKey, children }: PickerMenuProps) {
   const menuBg = dark ? '#000000' : '#FFFFFF'
   const fg = dark ? '#FFFFFF' : '#000000'
 
@@ -245,7 +247,7 @@ export function PickerMenu({ id, host, color, dark, label, caption, chip, colorS
           ]}
         >
           {/* Keyed by page, so swapping pages starts the new one scrolled to its top. */}
-          <FadingScrollView key={showColorPage ? 'color' : 'list'} contentContainerStyle={[styles.menuContent, showFooter && styles.menuContentAboveFooter]} showsVerticalScrollIndicator={false}>
+          <FadingScrollView key={showColorPage ? 'color' : `list:${pageKey ?? ''}`} contentContainerStyle={[styles.menuContent, showFooter && styles.menuContentAboveFooter]} showsVerticalScrollIndicator={false}>
             {colorSection && colorPage ? (
               <ColorPage section={colorSection} homeColor={homeColor} fg={fg} onBack={() => setColorPage(false)} />
             ) : (
@@ -281,6 +283,8 @@ interface IconRowProps {
   color: string
   fg: string
   disabled?: boolean
+  // An icon at the row's far end: a chevron on a row that opens a page of its own (an OptionPicker group)
+  trailing?: string
   onPress: () => void
 }
 
@@ -288,7 +292,7 @@ interface IconRowProps {
 // A selected row's own background fills entirely with its identity color - matching how a selected
 // row reads elsewhere (see @tastic/hud's SectionedDropdown) rather than a checkmark bolted onto an
 // otherwise-plain row.
-export function IconRow({ icon, iconColor, label, selected, color, fg, disabled = false, onPress }: IconRowProps) {
+export function IconRow({ icon, iconColor, label, selected, color, fg, disabled = false, trailing, onPress }: IconRowProps) {
   const textColor = selected ? getContrastColor(color) : fg
   return (
     <TouchableRipple disabled={disabled} onPress={onPress} style={[pickerMenuStyles.row, selected && { backgroundColor: color }]}>
@@ -300,6 +304,23 @@ export function IconRow({ icon, iconColor, label, selected, color, fg, disabled 
           <Icon source={icon} size={13} color={selected ? textColor : (iconColor ?? textColor)} />
         </View>
         <Text style={[pickerMenuStyles.rowLabel, { color: textColor }]} numberOfLines={1}>
+          {label}
+        </Text>
+        {trailing && <Icon source={trailing} size={18} color={textColor} />}
+      </View>
+    </TouchableRipple>
+  )
+}
+
+// A page's top row, back to the list: a chevron and the page's heading (the color page's, an OptionPicker group's)
+export function BackRow({ label, fg, onPress }: { label: string; fg: string; onPress: () => void }) {
+  return (
+    <TouchableRipple onPress={onPress} style={pickerMenuStyles.row} accessibilityRole='button' accessibilityLabel='Back'>
+      <View style={pickerMenuStyles.rowInner}>
+        <View style={styles.iconSlot}>
+          <Icon source='chevron-left' size={20} color={fg} />
+        </View>
+        <Text style={[styles.colorRowLabel, { color: fg }]} numberOfLines={1}>
           {label}
         </Text>
       </View>
@@ -357,16 +378,7 @@ function ColorPage({ section, homeColor, fg, onBack }: { section: ProfilePickerC
   const displayFor = previewValue ?? ((hex: string) => hex)
   return (
     <>
-      <TouchableRipple onPress={onBack} style={pickerMenuStyles.row} accessibilityRole='button' accessibilityLabel='Back'>
-        <View style={pickerMenuStyles.rowInner}>
-          <View style={styles.iconSlot}>
-            <Icon source='chevron-left' size={20} color={fg} />
-          </View>
-          <Text style={[styles.colorRowLabel, { color: fg }]} numberOfLines={1}>
-            {label}
-          </Text>
-        </View>
-      </TouchableRipple>
+      <BackRow label={label} fg={fg} onPress={onBack} />
       <View style={styles.swatches}>
         {swatches.map((swatch) => {
           const selected = swatch.value.toLowerCase() === value.toLowerCase()

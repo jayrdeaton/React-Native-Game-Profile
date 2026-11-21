@@ -88,12 +88,18 @@ see its own doc comment for why that component is generic over your own `Profile
   what the pill picks, such as "Difficulty", so a pill showing only "Any" says what it's for; it
   fits inside the pill's height and is read before the label, "DIFFICULTY, ANY") and the same
   `colorSection`, `align`, `alignOverride` and `triggerStyle` as `ProfilePicker`. Each `OptionPickerOption` is `{ value, label, icon?,
-  color?, dividerBefore? }`: `color` tints that option's row icon while it isn't the selected row
+  color?, dividerBefore?, triggerLabel?, options? }`: `color` tints that option's row icon while it isn't the selected row
   (the selected row fills with the picker's `color` as usual), and `dividerBefore` draws a divider
-  above the row to set it and the rows after it apart (ignored on the first option). Picking an
+  above the row to set it and the rows after it apart (ignored on the first option). An option with
+  `options` of its own is a group: a row with a chevron that swaps the menu for a page of them under
+  a back row, as the Color row does (a stats screen's Solitaire and Two Player games). The group's own
+  `value` is never picked, and its row fills while the option picked is one of its own; the popover
+  always opens on the top list. `triggerLabel` is what the pill says while that option is picked,
+  where its row's label alone wouldn't do (a group's "All" row, named by its group). Picking an
   option closes the popover; the Color row behaves as in `ProfilePicker`.
   `getOptionPickerContentSize(options, colorSection?)` is its popover's `{ width, height }`: pass
-  the options themselves to count their dividers, or a bare count for rows only.
+  the options themselves to count their dividers and size it for the tallest page (a group's back
+  row and options), or a bare count for rows only.
 - **`ProfilesManager`**: the roster: a chip and name per profile, alphabetically, with New Profile
   last. Tapping a row calls `onEdit(profileId)` with its id, and New Profile calls it with
   `NEW_PROFILE_ID` (`'new'`): wire it to a push of your edit route (see "Routed screens" below), the

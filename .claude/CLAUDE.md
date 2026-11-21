@@ -319,3 +319,8 @@ Enforced by ESLint + Prettier, run `npm run lint` before finishing any task.
 `exclude: ["src/__mocks__"]`, no other local compiler-option overrides. `tsup.config.cjs` is
 `require('@infinitetoken/tsconfig/tsup/lib')()` (target `es2020`, CJS + ESM + `.d.ts`/`.d.mts`,
 matching `package.json`'s single `"."` `exports` entry).
+
+## OptionPicker groups (2026-11-20, released in 0.26.0)
+
+Jay, on CardTastic's stats screen: the game pill listed all 20 games, and Solitaire / Two Player should shorten it. An `OptionPickerOption` with `options` of its own is a group: a row with a chevron (`IconRow`'s `trailing`) that swaps the menu for a page of them under a back row (`BackRow`, which the color page uses too), the group's row filled while the pick is one of its own, never picked itself. `triggerLabel` names a pick on the pill where its row label won't (a group's "All", the pill reading "Two Player"). The dropdown opens on the top list every time (the group page resets when it closes, by state adjusted during render, not an effect). `getOptionPickerContentSize` sizes for the tallest page, and `PickerMenu`'s `pageKey` starts a new page scrolled to its top. Tests: `OptionPicker.test.tsx`' "groups".
+
