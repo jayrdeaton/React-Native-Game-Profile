@@ -68,6 +68,10 @@ interface ProfilePickerProps<P extends Profile> {
   // Trigger's own idle-state text (uppercased here regardless of casing passed in) - shown until a
   // profile is selected.
   guestLabel: string
+  // A small line over the trigger's label naming the seat it picks for (PickerMenu's `caption`, as
+  // OptionPicker's): 'Player' over P1 or a profile's name (Jay, 2026-11-25: the loadout's seat
+  // buttons, beside the opponent's). Uppercased, in the label lettering.
+  caption?: string
   // The null-selection row's own label/icon - defaults to a generic anonymous-player row, but
   // overridable for a caller where null means something else (e.g. an "All Profiles" combined view
   // reusing this same component for its own picker).
@@ -112,7 +116,7 @@ interface ProfilePickerProps<P extends Profile> {
 // it keeps this popover from needing its own destructive-delete confirmation. Fully prop-driven -
 // no internal profile-storage access of its own, so the host app stays the one place that reads
 // its own persistence hook.
-export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, selectedId, takenId, takenIds, color, dark, align, alignOverride, guestLabel, nullLabel = 'Player', nullIcon = 'account-off-outline', onSelect, onManage, colorSection, triggerStyle }: ProfilePickerProps<P>) {
+export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, selectedId, takenId, takenIds, color, dark, align, alignOverride, guestLabel, caption, nullLabel = 'Player', nullIcon = 'account-off-outline', onSelect, onManage, colorSection, triggerStyle }: ProfilePickerProps<P>) {
   const id = `${idPrefix}-profile`
   // A selected row fills with the profile's drawn color, the same one its ProfileChip would show.
   const colorPreview = useProfileColorPreview()
@@ -159,7 +163,7 @@ export function ProfilePicker<P extends Profile>({ idPrefix, host, profiles, sel
   ) : undefined
 
   return (
-    <PickerMenu id={id} host={host} color={color} dark={dark} label={selectedProfile?.name ?? guestLabel} chip={colorSection ? { tag: selectedProfile?.tag, icon: selectedProfile ? 'account' : nullIcon } : undefined} colorSection={colorSection} homeColor={selectedProfile?.color} contentSize={contentSize} align={align} alignOverride={alignOverride} triggerStyle={triggerStyle} footer={manageFooter}>
+    <PickerMenu id={id} host={host} color={color} dark={dark} label={selectedProfile?.name ?? guestLabel} caption={caption} chip={colorSection ? { tag: selectedProfile?.tag, icon: selectedProfile ? 'account' : nullIcon } : undefined} colorSection={colorSection} homeColor={selectedProfile?.color} contentSize={contentSize} align={align} alignOverride={alignOverride} triggerStyle={triggerStyle} footer={manageFooter}>
       <IconRow icon={nullIcon} label={nullLabel} selected={selectedId === null} color={color} fg={fg} onPress={handleSelectGuest} />
 
       {sortedProfiles.map((profile) => {

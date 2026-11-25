@@ -91,6 +91,7 @@ const makeHost = (openId: string | null): MockHost => ({
 
 interface Overrides {
   host?: MockHost
+  caption?: string
   preview?: (hex: string) => string
   renderSwatch?: ProfileSwatchRenderer
   profiles?: Profile[]
@@ -114,7 +115,7 @@ function renderPicker(overrides: Overrides = {}) {
   const host = overrides.host ?? makeHost(null)
   const onSelect = overrides.onSelect ?? jest.fn()
   const utils = render(
-    <ProfilePicker idPrefix={ID_PREFIX} host={host} profiles={overrides.profiles ?? PROFILES} selectedId={overrides.selectedId ?? null} takenId={overrides.takenId} takenIds={overrides.takenIds} color={overrides.color ?? '#123456'} dark={overrides.dark ?? false} align={overrides.align} alignOverride={overrides.alignOverride} guestLabel={overrides.guestLabel ?? 'guest'} nullLabel={overrides.nullLabel} nullIcon={overrides.nullIcon} onSelect={onSelect} onManage={overrides.onManage} colorSection={overrides.colorSection} triggerStyle={overrides.triggerStyle} />,
+    <ProfilePicker idPrefix={ID_PREFIX} host={host} profiles={overrides.profiles ?? PROFILES} selectedId={overrides.selectedId ?? null} takenId={overrides.takenId} takenIds={overrides.takenIds} color={overrides.color ?? '#123456'} dark={overrides.dark ?? false} align={overrides.align} alignOverride={overrides.alignOverride} guestLabel={overrides.guestLabel ?? 'guest'} caption={overrides.caption} nullLabel={overrides.nullLabel} nullIcon={overrides.nullIcon} onSelect={onSelect} onManage={overrides.onManage} colorSection={overrides.colorSection} triggerStyle={overrides.triggerStyle} />,
     overrides.preview || overrides.renderSwatch
       ? {
           wrapper: ({ children }) => (
@@ -149,6 +150,18 @@ describe('ProfilePicker', () => {
     it('shows the uppercased guest label when nothing is selected', () => {
       renderPicker({ guestLabel: 'guest' })
       expect(textChildrenOf(mockText.mock.calls[0])).toBe('GUEST')
+    })
+
+    // The seat it picks for, over the name (OptionPicker's caption): the shell's seat buttons say PLAYER
+    it('captions its label with the seat, read caption first', () => {
+      renderPicker({ selectedId: AMY.id, caption: 'Player', colorSection: { value: AMY.color, onChange: jest.fn() } })
+      expect(mockText.mock.calls.slice(0, 2).map(textChildrenOf)).toEqual(['PLAYER', 'AMY'])
+      expect(mockTouchableRipple.mock.calls[0][0]).toMatchObject({ accessibilityLabel: 'PLAYER, AMY' })
+    })
+
+    it('draws no caption without one', () => {
+      renderPicker({ selectedId: AMY.id })
+      expect(mockText.mock.calls.map(textChildrenOf)).not.toContain('PLAYER')
     })
 
     it("shows the selected profile's uppercased name instead of the guest label", () => {

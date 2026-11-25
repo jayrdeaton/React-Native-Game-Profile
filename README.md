@@ -58,7 +58,9 @@ see its own doc comment for why that component is generic over your own `Profile
   opening one closes the others), `profiles`, `selectedId` (`null` for the guest row), `color` (the
   seat's live color), `dark`, `guestLabel` (the trigger's text while nothing is selected) and
   `onSelect(profile | null)`; `nullLabel` (default `'Player'`) and `nullIcon` (default
-  `'account-off-outline'`) relabel the null row. Profiles are listed alphabetically by name.
+  `'account-off-outline'`) relabel the null row. `caption` (0.29.0+) is a small line over the trigger's
+  label naming the seat, as `OptionPicker`'s: "Player" over a guest's or a profile's name, read before
+  it ("PLAYER, AMY"). Profiles are listed alphabetically by name.
   `takenId` disables one other seat's profile in the list; `takenIds`
   (an array) disables several, for a lobby with more than two seats, and never disables the
   picker's own selection, so you can pass every seated id. Placement props (both optional, see "Fake-rotated frames" below):
