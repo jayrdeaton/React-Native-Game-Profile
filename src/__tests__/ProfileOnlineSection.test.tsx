@@ -11,7 +11,7 @@ import { useOnlinePlayersSync } from '../online/useOnlinePlayers'
 
 jest.mock('@rific/auto-paper', () => ({ useAutoPaperTheme: jest.fn() }))
 jest.mock('@rific/feedback-press', () => ({ TouchableRipple: jest.fn(({ children }: any) => children ?? null) }))
-jest.mock('@tastic/hud/chrome', () => ({ ConfirmDialog: jest.fn(() => null) }))
+jest.mock('@tastic/hud/chrome', () => ({ ConfirmDialog: jest.fn(() => null), useLettering: jest.fn(() => ({})) }))
 
 const colors = { onSurface: '#fff', onSurfaceVariant: '#aaa', error: '#f00', errorContainer: '#400' }
 

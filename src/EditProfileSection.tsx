@@ -1,5 +1,6 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
+import { useLettering } from '@tastic/hud/chrome'
 import { createContext, type ReactNode, useContext } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
@@ -19,14 +20,24 @@ export function useEditProfileColors(): EditProfileColors {
   return useContext(EditProfileColorsContext) ?? { fg: dark ? '#FFFFFF' : '#000000', fgMuted: dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)' }
 }
 
+// A heading on Edit Profile, its own (Name, Tag, Color) and a game's (EditProfileSection's): small bold capitals in the muted
+// text color, with a game's label lettering (hud's LetteringProvider, the pack's labelStyle in @tastic/shell) laid over them, as
+// hud's StatSection and Settings sheet letter their section labels. Without one, nothing changes. Not exported from index.ts.
+export function SectionLabel({ color, children }: { color: string; children: string }) {
+  const { label: lettering } = useLettering()
+  return (
+    <Text style={[styles.sectionLabel, { color }, lettering]} accessibilityRole='header'>
+      {children.toUpperCase()}
+    </Text>
+  )
+}
+
 /** A labeled section of Edit Profile, as its own Name, Tag and Color are: for a game's sections on the screen. */
 export function EditProfileSection({ label, children }: { label: string; children: ReactNode }) {
   const { fgMuted } = useEditProfileColors()
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionLabel, { color: fgMuted }]} accessibilityRole='header'>
-        {label.toUpperCase()}
-      </Text>
+      <SectionLabel color={fgMuted}>{label}</SectionLabel>
       <View style={styles.rows}>{children}</View>
     </View>
   )

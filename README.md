@@ -141,7 +141,8 @@ see its own doc comment for why that component is generic over your own `Profile
 - **`EditProfileSection`**, **`EditProfileRow`** and **`useEditProfileColors()`**: for a game's own
   `sections` on Edit Profile, drawn in the screen's colors (its `fg`/`fgMuted`, black/white by
   appearance outside the screen) since they sit on the host's backdrop, not a card. `EditProfileSection`
-  is a labeled section as Name, Tag and Color are (`label`, `children`); `EditProfileRow` a row in the
+  is a labeled section as Name, Tag and Color are (`label`, `children`; its heading takes a game's label
+  lettering as theirs do, see "A game's own lettering"); `EditProfileRow` a row in the
   Settings sheet's shape (`icon`, `label`, `caption`, `onPress`, `disabled`, `tone` `'on'`, `'off'` or
   `'danger'` for its badge, `testID`).
 - **`ProfilesScreen`**: the routed-screen shell around `ProfilesManager`: the container `View`,
@@ -362,12 +363,14 @@ does it from the pack's `titleStyle` and `labelStyle`), and this package lays it
 - **`title`** on the screens' titles: "Profiles" (`ProfilesManager`, and so `ProfilesScreen`) and "Edit
   Profile" or "New Profile" (`EditProfileScreen`), over their `titleVariant`, as hud's `BaseStatsScreen`
   and the shell's loadout header letter theirs (DuelTastic's Orbitron, AlphaTastic's sketch font).
-- **`label`** on `ProfilePicker`'s and `OptionPicker`'s pill label (AlphaTastic sets its title font,
-  through `@tastic/shell`'s `labelStyle`).
+- **`label`** on `ProfilePicker`'s and `OptionPicker`'s pill label, and on Edit Profile's small capital
+  headings: its own Name, Tag and Color, and a game's own sections' (`EditProfileSection`), as hud's
+  stats headings and Settings sections letter theirs (AlphaTastic sets its label font, through
+  `@tastic/shell`'s `labelStyle`).
 
-Without the provider, or without that style, nothing changes: the titles keep their bold `titleVariant`
-and the pills their bold capitals. The rows, fields, hints and Edit Profile's section labels keep their
-own type. Needs `@tastic/hud` with `LetteringProvider` (0.35.0).
+Without the provider, or without that style, nothing changes: the titles keep their bold `titleVariant`,
+the pills their bold capitals and the headings their small bold capitals. The rows, fields and hints keep
+their own type. Needs `@tastic/hud` with `LetteringProvider` (0.35.0).
 
 ## Muted profile colors and drawn swatches (`ProfileColorProvider`)
 
@@ -596,7 +599,7 @@ importing them, so neither is a peer dependency: a game installs the ones it han
 This package imports `@tastic/hud` only through its light `@tastic/hud/chrome` entry, never the main
 one (which also loads Skia and `@tastic/split-screen`), so an app with neither, like Hangman, can use
 every component here. The floor is 0.35.0 for `useLettering` (a game's own lettering on the
-pickers' pills and the screens' titles, see "A game's own lettering" above).
+pickers' pills, the screens' titles and Edit Profile's headings, see "A game's own lettering" above).
 
 `expo-modules-core` is only for the native App Group bridge described above, which the shared
 roster functions use on iOS. It's loaded inside a `try`, so it's safe to omit entirely on an

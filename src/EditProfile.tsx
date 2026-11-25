@@ -7,7 +7,7 @@ import { KeyboardAvoidingView, type LayoutChangeEvent, Platform, StyleSheet, use
 import { Icon, Text, TextInput } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { EditProfileColorsContext } from './EditProfileSection'
+import { EditProfileColorsContext, SectionLabel } from './EditProfileSection'
 import { IdentityChip } from './IdentityChip'
 import { useProfileSwatchRenderer } from './ProfileColorContext'
 import { isValidTag, MAX_PROFILE_NAME_LENGTH } from './profilesValidation'
@@ -197,14 +197,6 @@ export function EditProfile({ isNew, draftName, onNameChange, draftTag, onTagCha
   )
 }
 
-function SectionLabel({ color, children }: { color: string; children: string }) {
-  return (
-    <Text style={[styles.sectionLabel, { color }]} accessibilityRole='header'>
-      {children.toUpperCase()}
-    </Text>
-  )
-}
-
 interface ColorGridProps {
   swatches: Swatch[]
   value: string
@@ -312,11 +304,6 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: 8
-  },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1
   },
   swatch: {
     alignItems: 'center',

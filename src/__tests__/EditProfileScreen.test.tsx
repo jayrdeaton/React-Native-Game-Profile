@@ -9,6 +9,7 @@ import { Text, TextInput } from 'react-native-paper'
 
 import { EDIT_CHIP_SIZE, EDIT_FORM_MAX_WIDTH, editSwatches, gridColumns, gridLayout, NAME_HINT, SWATCH_MAX, SWATCH_MIN, SWATCH_MIN_GAP, TAG_HINT } from '../EditProfile'
 import { EditProfileScreen, EditProfileScreenHandle, EditProfileScreenProps, NEW_PROFILE_ID } from '../EditProfileScreen'
+import { EditProfileRow, EditProfileSection } from '../EditProfileSection'
 import { IdentityChip } from '../IdentityChip'
 import { ProfileColorProvider } from '../ProfileColorContext'
 import { Profile } from '../types'
@@ -48,7 +49,7 @@ jest.mock('@rific/toaster', () => ({
 jest.mock('@tastic/hud/chrome', () => ({
   // hud's real confirm card (its own tests cover it); here only the props it was handed matter.
   ConfirmDialog: jest.fn(() => null),
-  // What a game's LetteringProvider holds: nothing, unless a test hands it a title.
+  // What a game's LetteringProvider holds: nothing, unless a test hands it a title or a label.
   useLettering: jest.fn(() => ({}))
 }))
 
@@ -323,6 +324,58 @@ describe("EditProfileScreen: the title's lettering", () => {
     renderScreen({ profileId: 'a' })
     const lettered = mockText.mock.calls.map(([props]) => props as any).filter((props) => [props.style].flat(Infinity).includes(LETTERING))
     expect(new Set(lettered.map((props) => flattenText(props.children)))).toEqual(new Set(['Edit Profile']))
+  })
+})
+
+// A game's own label lettering (hud's LetteringProvider, the pack's labelStyle in @tastic/shell: AlphaTastic's
+// sketch capitals), laid over Edit Profile's small capital headings, its own (Name, Tag, Color) and a game's
+// (EditProfileSection's), as hud's StatSection and Settings sheet letter their section labels.
+describe("EditProfileScreen: the headings' lettering", () => {
+  // AlphaTastic's labelType.
+  const LABEL = { fontFamily: 'AlphaSketchBold', fontWeight: 'normal' as const, textTransform: 'uppercase' as const, fontSize: 14, lineHeight: 20, letterSpacing: 0 }
+  const HEADING_TYPE = { fontSize: 12, fontWeight: '700', letterSpacing: 1 }
+  const HEADINGS = ['NAME', 'TAG', 'COLOR', 'ONLINE']
+  // A game's own section, as @tastic/profile/online's ProfileOnlineSection draws it.
+  const onlineSection = () => (
+    <EditProfileSection label='Online'>
+      <EditProfileRow icon='earth' label='Show on Public Boards' caption='Strangers see your tag' />
+    </EditProfileSection>
+  )
+  const headingStyle = (heading: string) => [findLastProps(mockText, (props) => props.accessibilityRole === 'header' && flattenText(props.children) === heading)?.style].flat(Infinity).filter(Boolean)
+
+  afterEach(() => {
+    jest.mocked(useLettering).mockReturnValue({})
+  })
+
+  it('are small bold capitals in the muted color without a game lettering', () => {
+    renderScreen({ profileId: 'a', fgMuted: '#999999', sections: onlineSection })
+    for (const heading of HEADINGS) expect(headingStyle(heading)).toEqual([HEADING_TYPE, { color: '#999999' }])
+  })
+
+  it('stay as they are with only a title lettering', () => {
+    jest.mocked(useLettering).mockReturnValue({ title: { fontFamily: 'Orbitron_700Bold' } })
+    renderScreen({ profileId: 'a', fgMuted: '#999999', sections: onlineSection })
+    for (const heading of HEADINGS) expect(headingStyle(heading)).toEqual([HEADING_TYPE, { color: '#999999' }])
+  })
+
+  it("carry the game's label lettering over their own type, after their color, Edit Profile's and a game's alike", () => {
+    jest.mocked(useLettering).mockReturnValue({ label: LABEL })
+    renderScreen({ profileId: 'a', fgMuted: '#999999', sections: onlineSection })
+    for (const heading of HEADINGS) expect(headingStyle(heading)).toEqual([HEADING_TYPE, { color: '#999999' }, LABEL])
+  })
+
+  it("letters only the headings, not the title, the hints or a section's rows", () => {
+    jest.mocked(useLettering).mockReturnValue({ label: LABEL })
+    renderScreen({ profileId: 'a', sections: onlineSection })
+    const lettered = mockText.mock.calls.map(([props]) => props as any).filter((props) => [props.style].flat(Infinity).includes(LABEL))
+    expect(new Set(lettered.map((props) => flattenText(props.children)))).toEqual(new Set(HEADINGS))
+    expect(hasTextContaining('Show on Public Boards')).toBe(true)
+  })
+
+  it('letters a section drawn outside the screen too, in the muted color by appearance', () => {
+    jest.mocked(useLettering).mockReturnValue({ label: LABEL })
+    render(onlineSection())
+    expect(headingStyle('ONLINE')).toEqual([HEADING_TYPE, { color: 'rgba(0,0,0,0.5)' }, LABEL])
   })
 })
 
