@@ -1,5 +1,6 @@
 import { FadingScrollView, useAutoPaperTheme } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
+import { useLettering } from '@tastic/hud/chrome'
 import { ReactNode, useMemo } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
@@ -47,6 +48,9 @@ type Row = { kind: 'profile'; profile: Profile } | { kind: 'new' }
 export function ProfilesManager({ profiles, onEdit, headerLeft, fg: fgOverride, titleVariant = 'headlineSmall' }: ProfilesManagerProps) {
   const { dark } = useAutoPaperTheme()
   const insets = useSafeAreaInsets()
+  // The title in the game's own lettering (hud's LetteringProvider: a pack's titleStyle), laid over
+  // titleVariant's type, as hud's BaseStatsScreen and the shell's loadout header letter theirs.
+  const { title: lettering } = useLettering()
   const fg = fgOverride ?? (dark ? '#FFFFFF' : '#000000')
 
   // Alphabetical - this list has no other natural order (creation order isn't meaningful to look
@@ -59,7 +63,7 @@ export function ProfilesManager({ profiles, onEdit, headerLeft, fg: fgOverride, 
     <View style={styles.screen}>
       <View style={[styles.header, { paddingTop: 8 + insets.top, paddingLeft: 8 + insets.left }]}>
         {headerLeft}
-        <Text variant={titleVariant} style={[styles.title, { color: fg }]}>
+        <Text variant={titleVariant} style={[styles.title, { color: fg }, lettering]}>
           Profiles
         </Text>
       </View>

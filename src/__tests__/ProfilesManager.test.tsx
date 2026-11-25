@@ -1,5 +1,6 @@
 import { FadingScrollView, useAutoPaperTheme } from '@rific/auto-paper'
 import { TouchableRipple } from '@rific/feedback-press'
+import { useLettering } from '@tastic/hud/chrome'
 import { act, render } from '@testing-library/react'
 import { Text } from 'react-native-paper'
 
@@ -16,8 +17,11 @@ jest.mock('../ProfileChip', () => ({
 
 // EditProfileScreen is imported for NEW_PROFILE_ID only; its own dependencies (hud, the toaster) are
 // stubbed so loading it here doesn't need them. Its own suite is EditProfileScreen.test.tsx.
+// useLettering returns what a game's LetteringProvider holds: nothing, unless a test hands it a title
+// (as OptionPicker.test.tsx does the label).
 jest.mock('@tastic/hud/chrome', () => ({
-  ConfirmDialog: jest.fn(() => null)
+  ConfirmDialog: jest.fn(() => null),
+  useLettering: jest.fn(() => ({}))
 }))
 
 jest.mock('@rific/toaster', () => ({
@@ -158,5 +162,45 @@ describe('ProfilesManager', () => {
 
     renderManager({ fg: '#123123' })
     expect(title().style).toEqual(expect.arrayContaining([{ color: '#123123' }]))
+  })
+
+  // A game's own title lettering (hud's LetteringProvider: DuelTastic's Orbitron, AlphaTastic's sketch
+  // font), laid over the title's own type, as hud's BaseStatsScreen and the shell's loadout header.
+  describe("the title's lettering", () => {
+    const titleProps = () =>
+      mockText.mock.calls
+        .map(([props]) => props as any)
+        .filter((props) => flattenText(props.children) === 'Profiles')
+        .pop()
+
+    afterEach(() => {
+      jest.mocked(useLettering).mockReturnValue({})
+    })
+
+    it('is the plain titleVariant type without a game lettering', () => {
+      renderManager()
+      expect(titleProps().variant).toBe('headlineSmall')
+      expect([titleProps().style].flat(Infinity).filter(Boolean)).toEqual([{ flexShrink: 1, fontWeight: 'bold' }, { color: '#000000' }])
+    })
+
+    it("carries the game's title lettering over its own type, after its color", () => {
+      const lettering = { fontFamily: 'Orbitron_700Bold', fontWeight: 'normal' as const }
+      jest.mocked(useLettering).mockReturnValue({ title: lettering })
+      renderManager({ titleVariant: 'titleLarge' })
+
+      const props = titleProps()
+      expect(props.variant).toBe('titleLarge')
+      const style = [props.style].flat(Infinity)
+      expect(style).toContainEqual(lettering)
+      expect(style.indexOf(lettering)).toBeGreaterThan(style.findIndex((entry: any) => entry?.color === '#000000'))
+    })
+
+    it('letters only the title, not the rows', () => {
+      jest.mocked(useLettering).mockReturnValue({ title: { fontFamily: 'Orbitron_700Bold' } })
+      renderManager({ profiles: [createProfile({ name: 'Alice' })] })
+
+      const lettered = mockText.mock.calls.map(([props]) => props as any).filter((props) => [props.style].flat(Infinity).some((entry: any) => entry?.fontFamily === 'Orbitron_700Bold'))
+      expect(lettered.map((props) => flattenText(props.children))).toEqual(['Profiles'])
+    })
   })
 })

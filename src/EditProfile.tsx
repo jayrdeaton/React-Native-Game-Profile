@@ -1,6 +1,7 @@
 import { defaultColors, FadingScrollView, getContrastColor, useAutoPaperTheme } from '@rific/auto-paper'
 import { Button, IconButton, TouchableRipple } from '@rific/feedback-press'
 import { useFocusChain } from '@rific/focus-chain'
+import { useLettering } from '@tastic/hud/chrome'
 import { type ReactNode, useMemo, useState } from 'react'
 import { KeyboardAvoidingView, type LayoutChangeEvent, Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Icon, Text, TextInput } from 'react-native-paper'
@@ -120,6 +121,8 @@ interface EditProfileProps {
 export function EditProfile({ isNew, draftName, onNameChange, draftTag, onTagChange, draftColor, onColorChange, startColor, onDone, onDelete, extra, fg, fgMuted, titleVariant, colorPreview }: EditProfileProps) {
   const { colors } = useAutoPaperTheme()
   const insets = useSafeAreaInsets()
+  // The title in the game's own lettering, as the roster's (ProfilesManager).
+  const { title: lettering } = useLettering()
   const { width: windowWidth } = useWindowDimensions()
   const textColors = useMemo(() => ({ fg, fgMuted }), [fg, fgMuted])
   const register = useFocusChain()
@@ -142,7 +145,7 @@ export function EditProfile({ isNew, draftName, onNameChange, draftTag, onTagCha
         {/* The back arrow ProfilesScreen draws, in the same place as the roster's headerLeft, so the
         corner holds still as the roster gives way to this screen. */}
         <IconButton icon='arrow-left' iconColor={fg} size={24} onPress={onDone} accessibilityLabel='Back' />
-        <Text variant={titleVariant} style={[styles.title, { color: fg }]} numberOfLines={1}>
+        <Text variant={titleVariant} style={[styles.title, { color: fg }, lettering]} numberOfLines={1}>
           {isNew ? 'New Profile' : 'Edit Profile'}
         </Text>
         <Button mode='text' onPress={onDone} textColor={colors.primary} labelStyle={styles.doneLabel} style={styles.done} accessibilityLabel='Done'>

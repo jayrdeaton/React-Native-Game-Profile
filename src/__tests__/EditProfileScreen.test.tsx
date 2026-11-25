@@ -1,7 +1,7 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
 import { Button, IconButton } from '@rific/feedback-press'
 import { useToast } from '@rific/toaster'
-import { ConfirmDialog } from '@tastic/hud/chrome'
+import { ConfirmDialog, useLettering } from '@tastic/hud/chrome'
 import { act, render } from '@testing-library/react'
 import { createRef } from 'react'
 import { View } from 'react-native'
@@ -47,7 +47,9 @@ jest.mock('@rific/toaster', () => ({
 
 jest.mock('@tastic/hud/chrome', () => ({
   // hud's real confirm card (its own tests cover it); here only the props it was handed matter.
-  ConfirmDialog: jest.fn(() => null)
+  ConfirmDialog: jest.fn(() => null),
+  // What a game's LetteringProvider holds: nothing, unless a test hands it a title.
+  useLettering: jest.fn(() => ({}))
 }))
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -279,6 +281,48 @@ describe('EditProfileScreen: opening', () => {
 
     expect(onBack).toHaveBeenCalledTimes(1)
     expect(onSave).not.toHaveBeenCalled()
+  })
+})
+
+// A game's own title lettering (hud's LetteringProvider: DuelTastic's Orbitron, AlphaTastic's sketch
+// font), laid over the title's own type, as the roster's title (ProfilesManager) and hud's BaseStatsScreen.
+describe("EditProfileScreen: the title's lettering", () => {
+  const titleProps = (title: string) => findLastProps(mockText, (props) => flattenText(props.children) === title)
+  const LETTERING = { fontFamily: 'Orbitron_700Bold', fontWeight: 'normal' as const }
+
+  afterEach(() => {
+    jest.mocked(useLettering).mockReturnValue({})
+  })
+
+  it('is the plain titleVariant type without a game lettering', () => {
+    renderScreen()
+    const props = titleProps('New Profile')
+    expect(props.variant).toBe('headlineSmall')
+    expect([props.style].flat(Infinity).filter(Boolean)).toEqual([{ flex: 1, fontWeight: 'bold' }, { color: '#000000' }])
+  })
+
+  it("carries the game's title lettering over its own type, after its color, new or saved", () => {
+    jest.mocked(useLettering).mockReturnValue({ title: LETTERING })
+    const expectLettered = (title: string) => {
+      const props = titleProps(title)
+      expect(props.variant).toBe('titleLarge')
+      const style = [props.style].flat(Infinity)
+      expect(style).toContainEqual(LETTERING)
+      expect(style.indexOf(LETTERING)).toBeGreaterThan(style.findIndex((entry: any) => entry?.color === '#000000'))
+    }
+
+    const { unmount } = renderScreen({ titleVariant: 'titleLarge' })
+    expectLettered('New Profile')
+    unmount()
+    renderScreen({ profileId: 'a', titleVariant: 'titleLarge' })
+    expectLettered('Edit Profile')
+  })
+
+  it('letters only the title, not the section labels or hints', () => {
+    jest.mocked(useLettering).mockReturnValue({ title: LETTERING })
+    renderScreen({ profileId: 'a' })
+    const lettered = mockText.mock.calls.map(([props]) => props as any).filter((props) => [props.style].flat(Infinity).includes(LETTERING))
+    expect(new Set(lettered.map((props) => flattenText(props.children)))).toEqual(new Set(['Edit Profile']))
   })
 })
 

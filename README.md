@@ -107,7 +107,8 @@ see its own doc comment for why that component is generic over your own `Profile
   own (no router, no back button) - a host app renders it as a routed screen's body. Optional
   `ProfilesManagerProps`: `headerLeft` (a node rendered before the "Profiles" title, e.g. a back
   button), `fg` (the text color, black/white by appearance when omitted) and `titleVariant` (a Paper
-  text variant, default `'headlineSmall'`).
+  text variant, default `'headlineSmall'`, with a game's title lettering laid over it: see "A game's
+  own lettering").
 - **`EditProfileScreen`**: one profile's own screen, for your edit route to render with the route's
   id: a back arrow and the title (Edit Profile, or New Profile) with Done on the right, the profile's
   chip big at the top as it will look, then **Name** (with a hint: "Only friends you invite online see
@@ -130,7 +131,8 @@ see its own doc comment for why that component is generic over your own `Profile
   shape in your own closure), `onDelete(id)` (fires only after the confirmation, then `onBack`: clear
   anything else you key by profile id there) and `onBack` (leave the screen), plus optional
   `fg`/`fgMuted` (text colors), `bg` (black/white by appearance by default, as `ProfilesScreen`'s;
-  `'transparent'` over your own backdrop), `titleVariant`, `colorPreview` (what the screen draws for a
+  `'transparent'` over your own backdrop), `titleVariant` (default `'headlineSmall'`, with a game's
+  title lettering laid over it, as the roster's), `colorPreview` (what the screen draws for a
   color; defaults to `ProfileColorProvider`'s `preview`), `sections` (a game's own sections for a
   saved profile, `(profile) => ReactNode`, drawn under Color and above Delete Profile:
   `@tastic/profile/online`'s `ProfileOnlineSection`, say) and `ref`, an `EditProfileScreenHandle` whose
@@ -352,12 +354,20 @@ so a host app plugs the reducer(s) into whatever store it already has:
   Always local, like the seat colors below, and never part of the shared
   App Group roster, since who's selected on *this* device is naturally per-app, per-device state.
 
-## A game's own lettering on the pills
+## A game's own lettering
 
-`ProfilePicker`'s and `OptionPicker`'s pill label is laid over with `@tastic/hud`'s `LetteringProvider`
-`label` style when an app sets one (AlphaTastic sets its title font, through `@tastic/shell`'s
-`labelStyle`). Without it the pill keeps its own bold capitals. Needs `@tastic/hud` with
-`LetteringProvider`.
+An app sets its own lettering once, at its root, with `@tastic/hud`'s `LetteringProvider` (`@tastic/shell`
+does it from the pack's `titleStyle` and `labelStyle`), and this package lays it over its own type:
+
+- **`title`** on the screens' titles: "Profiles" (`ProfilesManager`, and so `ProfilesScreen`) and "Edit
+  Profile" or "New Profile" (`EditProfileScreen`), over their `titleVariant`, as hud's `BaseStatsScreen`
+  and the shell's loadout header letter theirs (DuelTastic's Orbitron, AlphaTastic's sketch font).
+- **`label`** on `ProfilePicker`'s and `OptionPicker`'s pill label (AlphaTastic sets its title font,
+  through `@tastic/shell`'s `labelStyle`).
+
+Without the provider, or without that style, nothing changes: the titles keep their bold `titleVariant`
+and the pills their bold capitals. The rows, fields, hints and Edit Profile's section labels keep their
+own type. Needs `@tastic/hud` with `LetteringProvider` (0.35.0).
 
 ## Muted profile colors and drawn swatches (`ProfileColorProvider`)
 
@@ -586,7 +596,7 @@ importing them, so neither is a peer dependency: a game installs the ones it han
 This package imports `@tastic/hud` only through its light `@tastic/hud/chrome` entry, never the main
 one (which also loads Skia and `@tastic/split-screen`), so an app with neither, like Hangman, can use
 every component here. The floor is 0.35.0 for `useLettering` (a game's own lettering on the
-pickers' pills, see "A game's own lettering on the pills" above).
+pickers' pills and the screens' titles, see "A game's own lettering" above).
 
 `expo-modules-core` is only for the native App Group bridge described above, which the shared
 roster functions use on iOS. It's loaded inside a `try`, so it's safe to omit entirely on an
