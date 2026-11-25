@@ -171,8 +171,10 @@ export function EditProfile({ isNew, draftName, onNameChange, draftTag, onTagCha
             <View style={styles.section}>
               <SectionLabel color={fgMuted}>Tag</SectionLabel>
               {/* selectTextOnFocus: a tag is at most 3 letters, and clampTag refuses a 4th, so typing
-              into a full tag would do nothing; selected, a tap and a letter start it over. */}
-              <TextInput ref={textInputRef(tag.ref)} {...tag.props} onSubmitEditing={onDone} mode='outlined' dense value={draftTag} onChangeText={onTagChange} accessibilityLabel='Tag' accessibilityHint={TAG_HINT} autoCapitalize='characters' autoCorrect={false} selectTextOnFocus returnKeyType='done' error={tagInvalid} style={styles.tagInput} />
+              into a full tag would do nothing; selected, a tap and a letter start it over. The text is
+              centered, as it is on the chip: one letter or emoji at the left of the 120 wide field
+              looked lost (Jay, 2026-11-25). */}
+              <TextInput ref={textInputRef(tag.ref)} {...tag.props} onSubmitEditing={onDone} mode='outlined' dense value={draftTag} onChangeText={onTagChange} accessibilityLabel='Tag' accessibilityHint={TAG_HINT} autoCapitalize='characters' autoCorrect={false} selectTextOnFocus returnKeyType='done' error={tagInvalid} style={styles.tagInput} contentStyle={styles.tagContent} />
               <Text style={[styles.hint, { color: tagInvalid ? colors.danger : fgMuted }]}>{TAG_HINT}</Text>
             </View>
 
@@ -331,6 +333,9 @@ const styles = StyleSheet.create({
     top: 0
   },
   // Wide enough for three wide letters or an emoji, not a line of text.
+  tagContent: {
+    textAlign: 'center'
+  },
   tagInput: {
     width: 120
   },

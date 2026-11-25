@@ -409,6 +409,12 @@ describe('EditProfileScreen: the tag', () => {
     expect(lastTextInputProps('Tag')).toMatchObject({ selectTextOnFocus: true, autoCapitalize: 'characters', autoCorrect: false })
   })
 
+  // One letter or emoji at the left of the 120 wide field looked lost; centered, it sits as it does on the chip.
+  it('centers its text in the field', () => {
+    renderScreen()
+    expect(flat(lastTextInputProps('Tag').contentStyle).textAlign).toBe('center')
+  })
+
   // clampTag keeps the field from typing its way into an invalid tag, so this is one loaded from
   // storage: a legacy value, or one synced in from another app's looser rules.
   it('shows an invalid stored tag as an error, leaves it off the chip, and drops it with a toast on Done', () => {
